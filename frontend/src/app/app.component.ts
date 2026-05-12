@@ -110,7 +110,7 @@ interface OrgChartBranch {
   styleUrl: './app.component.scss'
 })
 export class AppComponent implements OnInit {
-  private readonly apiBaseUrl = 'http://localhost:8080/api/v1';
+  private readonly apiBaseUrl = 'http://127.0.0.1:8080/api/v1';
   private readonly adEmployeesStorageKey = 'hrPeopleOps.adEmployees';
   private readonly adSettingsStorageKey = 'hrPeopleOps.adSettings';
   private readonly employeePhotosStorageKey = 'hrPeopleOps.employeePhotos';
@@ -1049,7 +1049,7 @@ export class AppComponent implements OnInit {
 
   attendancePhotoUrl(employee: LiveAttendanceEmployee): string {
     return employee.photoPath
-      ? `${this.apiBaseUrl}/attendance/photo?path=${encodeURIComponent(employee.photoPath)}`
+      ? `${this.apiBaseUrl}/attendance/photo?path=${encodeURIComponent(employee.photoPath)}&v=faceid`
       : '';
   }
 
