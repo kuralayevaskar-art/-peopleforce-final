@@ -26,6 +26,18 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AdDirectoryService {
 
+    private static final List<String> STAFF_SEARCH_BASES = List.of(
+            "OU=Staff,OU=DMUK,DC=DMUK,DC=EDU",
+            "OU=AcademicStaff,OU=DMUK,DC=DMUK,DC=EDU"
+    );
+    private static final List<String> BLOCKED_OU_MARKERS = List.of(
+            "ou=students,",
+            "ou=f2025,",
+            "ou=lab accounts,",
+            "ou=labaccounts,",
+            "ou=test,"
+    );
+
     private final AdProperties properties;
 
     public AdUser authenticate(String username, String password) {
@@ -70,8 +82,8 @@ public class AdDirectoryService {
                     .username(username != null ? username : adapter.getStringAttribute("cn"))
                     .email(adapter.getStringAttribute("mail"))
                     .displayName(adapter.getStringAttribute("displayName") != null ? adapter.getStringAttribute("displayName") : adapter.getStringAttribute("cn"))
-                    .department(adapter.getStringAttribute("department"))
-                    .title(adapter.getStringAttribute("title"))
+                    .department(firstText(adapter.getStringAttribute("department"), departmentFromDn(adapter.getNameInNamespace())))
+                    .title(firstText(adapter.getStringAttribute("title"), adapter.getStringAttribute("description"), "Сотрудник"))
                     .manager(adapter.getStringAttribute("manager"))
                     .build();
         };
@@ -87,6 +99,7 @@ public class AdDirectoryService {
         }
 
         return uniqueUsers.values().stream()
+                .filter(this::isAllowedStaffUser)
                 .sorted(Comparator
                         .comparing((AdUser user) -> nullSafe(user.getDepartment()), String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(user -> nullSafe(user.getDisplayName()), String.CASE_INSENSITIVE_ORDER))
@@ -105,8 +118,8 @@ public class AdDirectoryService {
                     .username(username)
                     .email(adapter.getStringAttribute("mail") != null ? adapter.getStringAttribute("mail") : username + "@ad.local")
                     .displayName(adapter.getStringAttribute("displayName") != null ? adapter.getStringAttribute("displayName") : username)
-                    .department(adapter.getStringAttribute("department"))
-                    .title(adapter.getStringAttribute("title"))
+                    .department(firstText(adapter.getStringAttribute("department"), departmentFromDn(adapter.getNameInNamespace())))
+                    .title(firstText(adapter.getStringAttribute("title"), adapter.getStringAttribute("description"), "Сотрудник"))
                     .manager(adapter.getStringAttribute("manager"))
                     .build();
         };
@@ -154,12 +167,55 @@ public class AdDirectoryService {
 
     private List<String> searchBases(AdProperties effective) {
         if (effective.getSearchBaseDns() != null && !effective.getSearchBaseDns().isEmpty()) {
-            return effective.getSearchBaseDns().stream()
+            List<String> allowedBases = effective.getSearchBaseDns().stream()
                     .filter(StringUtils::hasText)
+                    .filter(this::isStaffSearchBase)
                     .toList();
+            if (!allowedBases.isEmpty()) {
+                return allowedBases;
+            }
         }
 
-        return List.of(effective.getBaseDn());
+        return STAFF_SEARCH_BASES;
+    }
+
+    private boolean isStaffSearchBase(String searchBase) {
+        String normalized = normalizeDn(searchBase);
+        return STAFF_SEARCH_BASES.stream()
+                .map(this::normalizeDn)
+                .anyMatch(normalized::equals);
+    }
+
+    private boolean isAllowedStaffUser(AdUser user) {
+        String dn = normalizeDn(user.getDn());
+        boolean inAllowedOu = STAFF_SEARCH_BASES.stream()
+                .map(this::normalizeDn)
+                .anyMatch(dn::contains);
+        boolean inBlockedOu = BLOCKED_OU_MARKERS.stream().anyMatch(dn::contains);
+        return inAllowedOu && !inBlockedOu && StringUtils.hasText(user.getUsername());
+    }
+
+    private String departmentFromDn(String dn) {
+        if (!StringUtils.hasText(dn)) {
+            return "";
+        }
+
+        for (String part : dn.split(",")) {
+            String trimmed = part.trim();
+            if (trimmed.regionMatches(true, 0, "OU=", 0, 3)) {
+                String ou = trimmed.substring(3);
+                String normalized = ou.replace(" ", "").toLowerCase(Locale.ROOT);
+                if (!List.of("staff", "academicstaff", "students", "f2025", "test", "labaccounts", "dmuk").contains(normalized)) {
+                    return ou;
+                }
+            }
+        }
+
+        return "";
+    }
+
+    private String normalizeDn(String value) {
+        return nullSafe(value).replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
     }
 
     private String firstText(String... values) {

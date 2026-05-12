@@ -117,6 +117,10 @@ export class AppComponent implements OnInit {
   private readonly employeePhotoAdjustmentsStorageKey = 'hrPeopleOps.employeePhotoAdjustments';
   private readonly adBindDnSessionKey = 'hrPeopleOps.adBindDn';
   private readonly adBindPasswordSessionKey = 'hrPeopleOps.adBindPassword';
+  readonly staffOnlySearchBaseDns = [
+    'OU=Staff,OU=DMUK,DC=DMUK,DC=EDU',
+    'OU=AcademicStaff,OU=DMUK,DC=DMUK,DC=EDU'
+  ];
 
   activeSection: SectionId = 'dashboard';
   selectedEmployeeId: number | null = null;
@@ -147,13 +151,7 @@ export class AppComponent implements OnInit {
     bindPassword: '',
     userFilter: '(sAMAccountName={username})',
     groupFilter: '(&(objectClass=group)(member={userDn}))',
-    searchBaseDns: [
-      'OU=Staff,OU=DMUK,DC=DMUK,DC=EDU',
-      'OU=AcademicStaff,OU=DMUK,DC=DMUK,DC=EDU',
-      'OU=Students,OU=DMUK,DC=DMUK,DC=EDU',
-      'OU=Test,OU=DMUK,DC=DMUK,DC=EDU',
-      'OU=F2025,OU=DMUK,DC=DMUK,DC=EDU'
-    ]
+    searchBaseDns: [...this.staffOnlySearchBaseDns]
   };
   zktecoSettings = {
     host: '10.1.70.2',
@@ -281,6 +279,24 @@ export class AppComponent implements OnInit {
       .sort((a, b) => a.name.localeCompare(b.name, 'ru-RU'));
   }
 
+  get positionGroups(): { name: string; count: number }[] {
+    const positions = new Map<string, { name: string; count: number }>();
+
+    for (const employee of this.employees) {
+      const name = this.cleanPositionName(employee.position);
+      const key = name.toLocaleLowerCase('ru-RU');
+      const current = positions.get(key);
+      if (current) {
+        current.count += 1;
+      } else {
+        positions.set(key, { name, count: 1 });
+      }
+    }
+
+    return Array.from(positions.values())
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru-RU'));
+  }
+
   get orgChartRoot(): Employee | undefined {
     return this.employees.find((employee) => /president|ceo|rector|director/i.test(employee.position))
       || this.employees.find((employee) => /top management|management/i.test(employee.department))
@@ -405,6 +421,7 @@ export class AppComponent implements OnInit {
     if (savedSettings) {
       this.adSettings = { ...this.adSettings, ...JSON.parse(savedSettings) };
     }
+    this.adSettings.searchBaseDns = [...this.staffOnlySearchBaseDns];
     this.adSettings.bindDn = sessionStorage.getItem(this.adBindDnSessionKey) || this.adSettings.bindDn;
     this.adSettings.bindPassword = sessionStorage.getItem(this.adBindPasswordSessionKey) || '';
     this.ensureEmployeeDocumentBuckets();
@@ -786,10 +803,11 @@ export class AppComponent implements OnInit {
   async testAdConnection(url: string, baseDn: string, bindDn: string, bindPassword: string, userFilter: string, groupFilter: string, searchBaseDns: string[]): Promise<void> {
     try {
       this.rememberAdCredentials(bindDn, bindPassword);
+      const staffSearchBaseDns = this.staffSearchBases(searchBaseDns);
       const response = await fetch(`${this.apiBaseUrl}/admin/integrations/ad/test`, {
         method: 'POST',
         headers: this.authorizedHeaders(),
-        body: JSON.stringify({ url, baseDn, bindDn, bindPassword, userFilter, groupFilter, searchBaseDns })
+        body: JSON.stringify({ url, baseDn, bindDn, bindPassword, userFilter, groupFilter, searchBaseDns: staffSearchBaseDns })
       });
       const payload = await response.json();
 
@@ -806,10 +824,11 @@ export class AppComponent implements OnInit {
   async saveAdSettings(url: string, baseDn: string, bindDn: string, bindPassword: string, userFilter: string, groupFilter: string, searchBaseDns: string[]): Promise<void> {
     try {
       this.rememberAdCredentials(bindDn, bindPassword);
+      const staffSearchBaseDns = this.staffSearchBases(searchBaseDns);
       const response = await fetch(`${this.apiBaseUrl}/admin/integrations/ad/settings`, {
         method: 'PUT',
         headers: this.authorizedHeaders(),
-        body: JSON.stringify({ url, baseDn, bindDn, bindPassword, userFilter, groupFilter, searchBaseDns })
+        body: JSON.stringify({ url, baseDn, bindDn, bindPassword, userFilter, groupFilter, searchBaseDns: staffSearchBaseDns })
       });
       const payload = await response.json();
 
@@ -817,7 +836,7 @@ export class AppComponent implements OnInit {
         throw new Error(payload.message || 'Настройки AD не сохранены');
       }
 
-      this.saveAdSettingsLocally(url, baseDn, bindDn, userFilter, groupFilter, searchBaseDns);
+      this.saveAdSettingsLocally(url, baseDn, bindDn, userFilter, groupFilter, staffSearchBaseDns);
       this.actionMessage = 'Настройки AD сохранены в backend runtime-конфиг.';
     } catch (error) {
       this.actionMessage = `Настройки AD не сохранены: ${error instanceof Error ? error.message : 'ошибка подключения'}`;
@@ -827,10 +846,11 @@ export class AppComponent implements OnInit {
   async loadAdEmployees(url: string, baseDn: string, bindDn: string, bindPassword: string, userFilter: string, groupFilter: string, searchBaseDns: string[]): Promise<void> {
     try {
       this.rememberAdCredentials(bindDn, bindPassword);
+      const staffSearchBaseDns = this.staffSearchBases(searchBaseDns);
       const response = await fetch(`${this.apiBaseUrl}/admin/integrations/ad/users/sync`, {
         method: 'POST',
         headers: this.authorizedHeaders(),
-        body: JSON.stringify({ url, baseDn, bindDn, bindPassword, userFilter, groupFilter, searchBaseDns })
+        body: JSON.stringify({ url, baseDn, bindDn, bindPassword, userFilter, groupFilter, searchBaseDns: staffSearchBaseDns })
       });
       const payload = await response.json();
 
@@ -845,7 +865,7 @@ export class AppComponent implements OnInit {
       this.ensureEmployeeDocumentBuckets();
 
       localStorage.setItem(this.adEmployeesStorageKey, JSON.stringify(this.employees));
-      this.saveAdSettingsLocally(url, baseDn, bindDn, userFilter, groupFilter, searchBaseDns);
+      this.saveAdSettingsLocally(url, baseDn, bindDn, userFilter, groupFilter, staffSearchBaseDns);
       this.actionMessage = `Загружено сотрудников из AD: ${this.employees.length}`;
       this.setSection('employees');
     } catch (error) {
@@ -1114,7 +1134,7 @@ export class AppComponent implements OnInit {
         bindDn: sessionStorage.getItem(this.adBindDnSessionKey) || payload.data.bindDn || this.adSettings.bindDn,
         userFilter: payload.data.userFilter || this.adSettings.userFilter,
         groupFilter: payload.data.groupFilter || this.adSettings.groupFilter,
-        searchBaseDns: payload.data.searchBaseDns?.length ? payload.data.searchBaseDns : this.adSettings.searchBaseDns
+        searchBaseDns: this.staffSearchBases(payload.data.searchBaseDns)
       };
       this.adSettings.bindPassword = sessionStorage.getItem(this.adBindPasswordSessionKey) || this.adSettings.bindPassword;
     } catch (error) {
@@ -1217,9 +1237,19 @@ export class AppComponent implements OnInit {
   }
 
   private saveAdSettingsLocally(url: string, baseDn: string, bindDn: string, userFilter: string, groupFilter: string, searchBaseDns: string[]): void {
-    this.adSettings = { ...this.adSettings, url, baseDn, bindDn, userFilter, groupFilter, searchBaseDns };
+    this.adSettings = { ...this.adSettings, url, baseDn, bindDn, userFilter, groupFilter, searchBaseDns: this.staffSearchBases(searchBaseDns) };
     const { bindPassword, ...settingsToPersist } = this.adSettings;
     localStorage.setItem(this.adSettingsStorageKey, JSON.stringify(settingsToPersist));
+  }
+
+  private staffSearchBases(values?: string[]): string[] {
+    const normalizedInput = new Set((values ?? [])
+      .map((value) => this.normalizeDn(value))
+      .filter(Boolean));
+    const selected = this.staffOnlySearchBaseDns
+      .filter((value) => normalizedInput.size === 0 || normalizedInput.has(this.normalizeDn(value)));
+
+    return selected.length ? selected : [...this.staffOnlySearchBaseDns];
   }
 
   private cleanDepartmentName(department: string | null | undefined): string {
@@ -1269,8 +1299,12 @@ export class AppComponent implements OnInit {
     }
 
     const ouValues = Array.from(value.matchAll(/OU=([^,]+)/gi)).map((match) => match[1]);
-    const ignored = new Set(['staff', 'academicstaff', 'students', 'test', 'dmuk']);
+    const ignored = new Set(['staff', 'academicstaff', 'students', 'test', 'f2025', 'lab accounts', 'labaccounts', 'dmuk']);
     return ouValues.find((ou) => !ignored.has(ou.toLowerCase())) || '';
+  }
+
+  private normalizeDn(value: string | null | undefined): string {
+    return (value || '').replace(/\s+/g, '').toLowerCase();
   }
 
   private findDepartmentLeader(employees: Employee[]): Employee | undefined {

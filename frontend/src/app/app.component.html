@@ -44,19 +44,11 @@
         <p class="page-sub">Monday, May 4, 2026</p>
       </div>
       <div class="topbar-actions">
-        <button class="icon-btn" type="button" aria-label="Timer">T</button>
-        <button class="btn quick-add" type="button" (click)="openCreateUser()">+ Создать пользователя</button>
-        <button class="icon-btn notification" type="button" aria-label="Notifications">N<span>10</span></button>
         @if (isAuthenticated) {
-          <button class="btn" type="button" (click)="signOut()">Logout</button>
+          <button class="btn" type="button" (click)="signOut()">Выйти</button>
         } @else {
-          <button class="btn" type="button" (click)="toggleAuthPanel()">Login</button>
+          <button class="btn btn-primary" type="button" (click)="toggleAuthPanel()">Войти</button>
         }
-        <button class="profile-menu" type="button">
-          <span class="profile-mini">{{ signedInUser.slice(0, 1) }}</span>
-          <strong>{{ isAuthenticated ? signedInUser : 'Eloise' }}</strong>
-          <span>v</span>
-        </button>
       </div>
     </header>
 
@@ -68,10 +60,10 @@
             <button type="button" (click)="toggleAuthPanel()">Close</button>
           </div>
           <div class="form-grid">
-            <label>Email / AD login<input #adLogin type="text" value="hr@demo.com" /></label>
-            <label>Password<input #adPassword type="password" value="Admin123!" placeholder="Enter password" /></label>
+            <label>Email / AD login<input #adLogin type="text" placeholder="name@dmuk.edu.kz" /></label>
+            <label>Password<input #adPassword type="password" placeholder="Enter password" /></label>
           </div>
-          <p class="login-hint">Demo password: <b>Admin123!</b>. Use <b>hr&#64;demo.com</b> or <b>admin&#64;demo.com</b>.</p>
+          <p class="login-hint">Используйте рабочую учетную запись сайта или AD.</p>
           <div class="button-row">
             <button class="btn btn-primary" type="button" (click)="signInWithPassword(adLogin.value, adPassword.value)">Login with password</button>
             <button class="btn" type="button" (click)="signInWithAd(adLogin.value, adPassword.value)">Login with AD</button>
@@ -164,12 +156,7 @@
                 <button [class.active]="activeEmployeeTab === 'personal'" type="button" (click)="setEmployeeTab('personal')">Personal</button>
                 <button [class.active]="activeEmployeeTab === 'job'" type="button" (click)="setEmployeeTab('job')">Job</button>
                 <button [class.active]="activeEmployeeTab === 'attendance'" type="button" (click)="setEmployeeTab('attendance')">Attendance</button>
-                <button [class.active]="activeEmployeeTab === 'timeoff'" type="button" (click)="setEmployeeTab('timeoff')">Time off</button>
-                <button [class.active]="activeEmployeeTab === 'performance'" type="button" (click)="setEmployeeTab('performance')">Performance</button>
                 <button [class.active]="activeEmployeeTab === 'documents'" type="button" (click)="setEmployeeTab('documents')">Documents</button>
-                <button [class.active]="activeEmployeeTab === 'onboarding'" type="button" (click)="setEmployeeTab('onboarding')">Onboarding</button>
-                <button [class.active]="activeEmployeeTab === 'tasks'" type="button" (click)="setEmployeeTab('tasks')">Tasks</button>
-                <button [class.active]="activeEmployeeTab === 'more'" type="button" (click)="setEmployeeTab('more')">More v</button>
               </nav>
               @switch (activeEmployeeTab) {
                 @case ('personal') {
@@ -186,13 +173,17 @@
                 @case ('job') {
                   <article class="profile-section-card">
                     <div class="card-header"><h2>Job</h2></div>
-                    <div class="job-form">
-                      <label>Hired on<input type="text" [value]="selectedEmployee.hireDate" /></label>
-                      <button class="btn btn-primary" type="button">Save</button>
+                    <div class="detail-list">
+                      <div><span>Position from AD</span><b>{{ selectedEmployee.position }}</b></div>
+                      <div><span>Department from AD</span><b>{{ selectedEmployee.department }}</b></div>
+                      <div><span>Manager from AD</span><b>{{ selectedEmployee.manager || 'Not assigned' }}</b></div>
+                      <div><span>AD login</span><b>{{ selectedEmployee.adUsername || '-' }}</b></div>
+                      <div><span>Email</span><b>{{ selectedEmployee.email || '-' }}</b></div>
+                      <div><span>Hired on</span><b>{{ selectedEmployee.hireDate }}</b></div>
                     </div>
                   </article>
                   <article class="profile-section-card">
-                    <div class="card-header"><h2>Employment Status</h2><button type="button">Add</button></div>
+                    <div class="card-header"><h2>Employment Status</h2></div>
                     <div class="detail-list">
                       <div><span>Status</span><b>{{ selectedEmployee.statusLabel }}</b></div>
                       <div><span>Manager</span><b>{{ selectedEmployee.manager || 'Not assigned' }}</b></div>
@@ -485,16 +476,13 @@
                   <label>Group filter<input #groupFilter type="text" [value]="adSettings.groupFilter" /></label>
                 </div>
                 <div class="ou-list">
-                  <label>Search base DN<input #ou1 type="text" [value]="adSettings.searchBaseDns[0]" /></label>
-                  <label>Search base DN<input #ou2 type="text" [value]="adSettings.searchBaseDns[1]" /></label>
-                  <label>Search base DN<input #ou3 type="text" [value]="adSettings.searchBaseDns[2]" /></label>
-                  <label>Search base DN<input #ou4 type="text" [value]="adSettings.searchBaseDns[3]" /></label>
-                  <label>Search base DN<input #ou5 type="text" [value]="adSettings.searchBaseDns[4]" /></label>
+                  <label>Staff OU<input #ou1 type="text" [value]="staffOnlySearchBaseDns[0]" readonly /></label>
+                  <label>AcademicStaff OU<input #ou2 type="text" [value]="staffOnlySearchBaseDns[1]" readonly /></label>
                 </div>
                 <div class="button-row">
-                  <button class="btn" type="button" (click)="testAdConnection(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value, ou3.value, ou4.value, ou5.value])">Test connection</button>
-                  <button class="btn btn-primary" type="button" (click)="saveAdSettings(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value, ou3.value, ou4.value, ou5.value])">Save settings</button>
-                  <button class="btn btn-primary" type="button" (click)="loadAdEmployees(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value, ou3.value, ou4.value, ou5.value])">Load employees from AD</button>
+                  <button class="btn" type="button" (click)="testAdConnection(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value])">Test connection</button>
+                  <button class="btn btn-primary" type="button" (click)="saveAdSettings(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value])">Save settings</button>
+                  <button class="btn btn-primary" type="button" (click)="loadAdEmployees(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value])">Load employees from AD</button>
                 </div>
               </article>
               <article class="card">
@@ -577,7 +565,18 @@
             }
           }
           @case ('positions') {
-            <article class="card"><div class="card-header"><h2>Positions</h2><button type="button" (click)="handlePrimaryAction()">Create position</button></div><div class="list-row"><span>Senior Developer</span><span class="muted">12 employees</span></div><div class="list-row"><span>HR Manager</span><span class="muted">4 employees</span></div><div class="list-row"><span>Financial analyst</span><span class="muted">6 employees</span></div><div class="list-row"><span>SMM Manager</span><span class="muted">3 employees</span></div></article>
+            <article class="card">
+              <div class="card-header"><h2>Positions from AD</h2></div>
+              @for (position of positionGroups; track position.name) {
+                <div class="list-row">
+                  <span>{{ position.name }}</span>
+                  <span class="muted">{{ position.count }} employees</span>
+                </div>
+              }
+              @if (!positionGroups.length) {
+                <div class="notice">Должности появятся после синхронизации AD. Поле берется из AD attribute title.</div>
+              }
+            </article>
           }
           @case ('attendance') {
             <div class="metrics">

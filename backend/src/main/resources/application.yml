@@ -37,9 +37,6 @@ app:
     search-base-dns:
       - OU=Staff,OU=DMUK,DC=DMUK,DC=EDU
       - OU=AcademicStaff,OU=DMUK,DC=DMUK,DC=EDU
-      - OU=Students,OU=DMUK,DC=DMUK,DC=EDU
-      - OU=Test,OU=DMUK,DC=DMUK,DC=EDU
-      - OU=F2025,OU=DMUK,DC=DMUK,DC=EDU
   zkteco:
     enabled: ${ZKTECO_SYNC_ENABLED:false}
     host: ${ZKTECO_HOST:10.1.70.2}
