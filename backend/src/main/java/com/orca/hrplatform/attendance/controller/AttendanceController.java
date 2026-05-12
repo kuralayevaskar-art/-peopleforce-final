@@ -11,6 +11,7 @@ import com.orca.hrplatform.common.response.ApiResponse;
 import com.orca.hrplatform.integration.zkteco.config.ZktecoProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
@@ -23,8 +24,18 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.file.Path;
+import java.net.URI;
+import java.net.HttpURLConnection;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.util.List;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 @RestController
 @RequestMapping("/attendance")
@@ -73,30 +84,90 @@ public class AttendanceController {
 
     @GetMapping("/photo")
     public ResponseEntity<Resource> getPhoto(@RequestParam String path) {
-        if (zktecoProperties.getPhotoRoot() == null || zktecoProperties.getPhotoRoot().isBlank()) {
-            return ResponseEntity.notFound().build();
-        }
-
         String cleanPath = path.replace("\\", "/");
         while (cleanPath.startsWith("/")) {
             cleanPath = cleanPath.substring(1);
         }
 
-        Path root = Path.of(zktecoProperties.getPhotoRoot()).normalize();
-        Path fullPath = root.resolve(cleanPath).normalize();
-        if (!fullPath.startsWith(root)) {
-            return ResponseEntity.notFound().build();
+        if (zktecoProperties.getPhotoRoot() != null && !zktecoProperties.getPhotoRoot().isBlank()) {
+            Path root = Path.of(zktecoProperties.getPhotoRoot()).normalize();
+            Path fullPath = root.resolve(cleanPath).normalize();
+            if (!fullPath.startsWith(root)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            FileSystemResource resource = new FileSystemResource(fullPath);
+            if (resource.exists() && resource.isReadable()) {
+                return ResponseEntity.ok()
+                        .contentType(mediaTypeFor(cleanPath, null))
+                        .cacheControl(CacheControl.noCache())
+                        .body(resource);
+            }
         }
 
-        FileSystemResource resource = new FileSystemResource(fullPath);
-        if (!resource.exists() || !resource.isReadable()) {
-            return ResponseEntity.notFound().build();
+        return fetchRemoteZktecoPhoto(cleanPath);
+    }
+
+    private ResponseEntity<Resource> fetchRemoteZktecoPhoto(String cleanPath) {
+        List<String> candidates = List.of(
+                "https://" + zktecoProperties.getHost() + ":8098/" + cleanPath,
+                "https://" + zktecoProperties.getHost() + ":8088/" + cleanPath
+        );
+
+        for (String url : candidates) {
+            try {
+                HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+                connection.setConnectTimeout((int) Duration.ofSeconds(6).toMillis());
+                connection.setReadTimeout((int) Duration.ofSeconds(6).toMillis());
+                if (connection instanceof HttpsURLConnection httpsConnection) {
+                    httpsConnection.setSSLSocketFactory(insecureSocketFactory());
+                    httpsConnection.setHostnameVerifier((hostname, session) -> true);
+                }
+
+                if (connection.getResponseCode() >= 200 && connection.getResponseCode() < 300) {
+                    byte[] bytes = connection.getInputStream().readAllBytes();
+                    if (bytes.length == 0) {
+                        continue;
+                    }
+                    ByteArrayResource resource = new ByteArrayResource(bytes);
+                    String contentType = connection.getContentType();
+                    return ResponseEntity.ok()
+                            .contentType(mediaTypeFor(cleanPath, contentType))
+                            .cacheControl(CacheControl.noCache())
+                            .body(resource);
+                }
+            } catch (Exception ignored) {
+                // Try next known ZKTeco web port.
+            }
         }
 
-        MediaType mediaType = cleanPath.toLowerCase().endsWith(".png") ? MediaType.IMAGE_PNG : MediaType.IMAGE_JPEG;
-        return ResponseEntity.ok()
-                .contentType(mediaType)
-                .cacheControl(CacheControl.noCache())
-                .body(resource);
+        return ResponseEntity.notFound().build();
+    }
+
+    private MediaType mediaTypeFor(String path, String contentType) {
+        String lowerPath = path.toLowerCase();
+        if (lowerPath.endsWith(".png")) {
+            return MediaType.IMAGE_PNG;
+        }
+        if (lowerPath.endsWith(".jpg") || lowerPath.endsWith(".jpeg")) {
+            return MediaType.IMAGE_JPEG;
+        }
+        if (contentType != null && contentType.toLowerCase().startsWith("image/")) {
+            return MediaType.parseMediaType(contentType.split(";")[0]);
+        }
+        return MediaType.APPLICATION_OCTET_STREAM;
+    }
+
+    private SSLSocketFactory insecureSocketFactory() throws Exception {
+        TrustManager[] trustManagers = new TrustManager[] {
+                new X509TrustManager() {
+                    public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+                    public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                }
+        };
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, trustManagers, new SecureRandom());
+        return sslContext.getSocketFactory();
     }
 }
