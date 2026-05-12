@@ -110,7 +110,7 @@
                   Upload photo
                   <input type="file" accept="image/*" (change)="uploadEmployeePhoto($event, selectedEmployee.id)" />
                 </label>
-                @if (photoFor(selectedEmployee)) {
+                @if (isManualPhoto(selectedEmployee)) {
                   <div class="photo-actions">
                     <button class="photo-edit" type="button" (click)="editEmployeePhoto(selectedEmployee.id)">Adjust photo</button>
                     <button class="photo-remove" type="button" (click)="removeEmployeePhoto(selectedEmployee.id)">Remove</button>

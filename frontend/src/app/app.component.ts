@@ -362,10 +362,18 @@ export class AppComponent implements OnInit {
   }
 
   photoFor(employee: Employee): string | undefined {
-    return employee.photoUrl || this.employeePhotos[employee.id];
+    return employee.photoUrl || this.employeePhotos[employee.id] || this.zktecoFacePhotoFor(employee);
+  }
+
+  isManualPhoto(employee: Employee): boolean {
+    return Boolean(employee.photoUrl || this.employeePhotos[employee.id]);
   }
 
   photoAdjustmentFor(employee: Employee): PhotoAdjustment {
+    if (!this.isManualPhoto(employee)) {
+      return { x: 50, y: 50, zoom: 1 };
+    }
+
     const adjustment = this.employeePhotoAdjustments[employee.id] ?? { x: 50, y: 50, zoom: 1.2 };
     return { ...adjustment, zoom: Math.max(1.2, adjustment.zoom) };
   }
@@ -376,6 +384,10 @@ export class AppComponent implements OnInit {
   }
 
   photoSizeFor(employee: Employee): string {
+    if (!this.isManualPhoto(employee)) {
+      return 'cover';
+    }
+
     return `${Math.round(this.photoAdjustmentFor(employee).zoom * 100)}%`;
   }
 
@@ -1041,6 +1053,12 @@ export class AppComponent implements OnInit {
       : '';
   }
 
+  zktecoFacePhotoFor(employee: Employee): string | undefined {
+    const match = this.attendanceForEmployee(employee);
+    const url = match ? this.attendancePhotoUrl(match) : '';
+    return url || undefined;
+  }
+
   attendanceInitials(employee: LiveAttendanceEmployee): string {
     return `${employee.name?.charAt(0) || ''}${employee.lastName?.charAt(0) || ''}`.toUpperCase() || '?';
   }
@@ -1059,11 +1077,23 @@ export class AppComponent implements OnInit {
       return undefined;
     }
 
+    return this.attendanceForEmployee(employee);
+  }
+
+  private attendanceForEmployee(employee: Employee): LiveAttendanceEmployee | undefined {
     const login = this.loginForEmployee(employee).toLowerCase();
     const pin = (employee.zktecoPin || employee.adUsername || login).toLowerCase();
+    const employeeName = employee.name.toLowerCase();
+
     return this.attendanceEmployees.find((candidate) =>
+      Boolean(candidate.photoPath)
+      && (
+        (candidate.pin || '').toLowerCase() === pin
+        || `${candidate.name || ''} ${candidate.lastName || ''}`.trim().toLowerCase() === employeeName
+      )
+    ) || this.attendanceEmployees.find((candidate) =>
       (candidate.pin || '').toLowerCase() === pin
-      || `${candidate.name || ''} ${candidate.lastName || ''}`.trim().toLowerCase() === employee.name.toLowerCase()
+      || `${candidate.name || ''} ${candidate.lastName || ''}`.trim().toLowerCase() === employeeName
     );
   }
 
