@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:./target/local-db/hr_peopleops_local3;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration-local
+
+logging:
+  level:
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO

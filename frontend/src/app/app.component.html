@@ -1,0 +1,666 @@
+﻿<h2 class="sr-only">HR PeopleOps Platform</h2>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">
+        <div class="logo-name"><span>people</span>force</div>
+      </div>
+      <div class="sidebar-search">
+        <span>Search</span>
+        <input type="search" placeholder="Search..." aria-label="Search" />
+        <kbd>Ctrl K</kbd>
+      </div>
+    </div>
+
+    <nav class="nav" aria-label="Main navigation">
+      @for (group of visibleGroups; track group.title) {
+        @if (group.title === 'Кадры') {
+          <a class="nav-section nav-section-link" href="/org-chart" [class.active]="activeSection === 'orgchart'" (click)="navigate($event, 'orgchart')">{{ group.title }}</a>
+        } @else {
+          <p class="nav-section">{{ group.title }}</p>
+        }
+        @for (item of group.items; track item.id) {
+          <a class="nav-item" [href]="item.path" [class.active]="activeSection === item.id" (click)="navigate($event, item.id)">
+            <span>{{ item.label }}</span>
+            @if (badgeFor(item)) { <span class="badge">{{ badgeFor(item) }}</span> }
+          </a>
+        }
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="avatar" aria-hidden="true">{{ signedInUser.slice(0, 1) }}</div>
+      <div>
+        <p class="user-name">{{ signedInUser }}</p>
+        <p class="user-role">{{ isAuthenticated ? 'HR Manager' : 'Guest' }}</p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 class="page-title">{{ selectedEmployee?.name || sectionTitles[activeSection] }}</h1>
+        <p class="page-sub">Monday, May 4, 2026</p>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" type="button" aria-label="Timer">T</button>
+        <button class="btn quick-add" type="button" (click)="openCreateUser()">+ Создать пользователя</button>
+        <button class="icon-btn notification" type="button" aria-label="Notifications">N<span>10</span></button>
+        @if (isAuthenticated) {
+          <button class="btn" type="button" (click)="signOut()">Logout</button>
+        } @else {
+          <button class="btn" type="button" (click)="toggleAuthPanel()">Login</button>
+        }
+        <button class="profile-menu" type="button">
+          <span class="profile-mini">{{ signedInUser.slice(0, 1) }}</span>
+          <strong>{{ isAuthenticated ? signedInUser : 'Eloise' }}</strong>
+          <span>v</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="content">
+      @if (showAuthPanel) {
+        <article class="card auth-card">
+          <div class="card-header">
+            <h2>Login</h2>
+            <button type="button" (click)="toggleAuthPanel()">Close</button>
+          </div>
+          <div class="form-grid">
+            <label>Email / AD login<input #adLogin type="text" value="hr@demo.com" /></label>
+            <label>Password<input #adPassword type="password" value="Admin123!" placeholder="Enter password" /></label>
+          </div>
+          <p class="login-hint">Demo password: <b>Admin123!</b>. Use <b>hr&#64;demo.com</b> or <b>admin&#64;demo.com</b>.</p>
+          <div class="button-row">
+            <button class="btn btn-primary" type="button" (click)="signInWithPassword(adLogin.value, adPassword.value)">Login with password</button>
+            <button class="btn" type="button" (click)="signInWithAd(adLogin.value, adPassword.value)">Login with AD</button>
+          </div>
+        </article>
+      }
+
+      @if (actionMessage) { <div class="notice">{{ actionMessage }}</div> }
+
+      @if (!canViewCurrentSection) {
+        <article class="card access-card">
+          <div class="card-header"><h2>Login required</h2></div>
+          <p class="access-text">AD/LDAP settings are available only for an authorized administrator.</p>
+          <div class="button-row">
+            <button class="btn btn-primary" type="button" (click)="toggleAuthPanel()">Login</button>
+            <button class="btn" type="button" (click)="setSection('dashboard')">Go to dashboard</button>
+          </div>
+        </article>
+      } @else if (selectedEmployee) {
+        <section class="employee-page">
+          <div class="employee-cover">
+            <button class="cover-edit" type="button">Edit cover photo v</button>
+            <strong>BUSINESS DRIVEN, PEOPLE FOCUSED</strong>
+            <span>peopleforce</span>
+          </div>
+          <div class="employee-profile">
+            <aside class="employee-side">
+              <div class="employee-photo-card">
+                <div class="employee-photo">
+                  @if (photoFor(selectedEmployee)) {
+                    <span
+                      class="employee-photo-image"
+                      role="img"
+                      [attr.aria-label]="selectedEmployee.name"
+                      [style.background-image]="'url(' + photoFor(selectedEmployee) + ')'"
+                      [style.background-position]="photoPositionFor(selectedEmployee)"
+                      [style.background-size]="photoSizeFor(selectedEmployee)"
+                    ></span>
+                  } @else {
+                    {{ selectedEmployee.name.slice(0, 1) }}
+                  }
+                </div>
+                <label class="photo-upload employee-photo-upload">
+                  Upload photo
+                  <input type="file" accept="image/*" (change)="uploadEmployeePhoto($event, selectedEmployee.id)" />
+                </label>
+                @if (photoFor(selectedEmployee)) {
+                  <div class="photo-actions">
+                    <button class="photo-edit" type="button" (click)="editEmployeePhoto(selectedEmployee.id)">Adjust photo</button>
+                    <button class="photo-remove" type="button" (click)="removeEmployeePhoto(selectedEmployee.id)">Remove</button>
+                  </div>
+                  @if (isEditingPhoto(selectedEmployee.id)) {
+                    <div class="photo-adjust">
+                      <label>Left / right<input #photoX type="range" min="0" max="100" step="1" [value]="photoAdjustmentFor(selectedEmployee).x" (input)="updateEmployeePhotoAdjustment(selectedEmployee.id, 'x', photoX.value)" /></label>
+                      <label>Up / down<input #photoY type="range" min="0" max="100" step="1" [value]="photoAdjustmentFor(selectedEmployee).y" (input)="updateEmployeePhotoAdjustment(selectedEmployee.id, 'y', photoY.value)" /></label>
+                      <label>Zoom<input #photoZoom type="range" min="1.2" max="2" step="0.05" [value]="photoAdjustmentFor(selectedEmployee).zoom" (input)="updateEmployeePhotoAdjustment(selectedEmployee.id, 'zoom', photoZoom.value)" /></label>
+                      <div class="photo-adjust-actions">
+                        <button class="photo-reset" type="button" (click)="resetEmployeePhotoAdjustment(selectedEmployee.id)">Center photo</button>
+                        <button class="photo-save" type="button" (click)="finishEmployeePhotoEdit()">Save position</button>
+                      </div>
+                    </div>
+                  }
+                }
+              </div>
+              <article class="profile-contact-card">
+                <a href="mailto:{{ selectedEmployee.email }}"><span>Email</span>{{ selectedEmployee.email || 'email not specified' }}</a>
+                <a href="#">in {{ selectedEmployee.name }}</a>
+                <a href="tel:{{ selectedEmployee.phone }}"><span>Phone</span>{{ selectedEmployee.phone || 'phone not specified' }}</a>
+                <div><span>Hired on</span><strong>{{ selectedEmployee.hireDate }}</strong></div>
+                <div><span>Employment type</span><strong>{{ selectedEmployee.employmentType }}</strong></div>
+                <div><span>Position</span><strong>{{ selectedEmployee.position }}</strong></div>
+                <div><span>Department</span><strong>{{ selectedEmployee.department }}</strong></div>
+              </article>
+            </aside>
+            <main class="employee-main">
+              <div class="employee-title-row">
+                <div>
+                  <button class="back-link" type="button" (click)="backToEmployees()">Back</button>
+                  <h2>{{ selectedEmployee.name }}</h2>
+                  <p>Job: {{ selectedEmployee.position }}</p>
+                  <p>Location: {{ selectedEmployee.location || 'Location not specified' }}</p>
+                </div>
+                <div class="employee-nav-actions">
+                  <button type="button">Previous</button>
+                  <button type="button">Next</button>
+                  <button type="button">...</button>
+                </div>
+              </div>
+              <nav class="employee-tabs" aria-label="Employee profile tabs">
+                <button [class.active]="activeEmployeeTab === 'personal'" type="button" (click)="setEmployeeTab('personal')">Personal</button>
+                <button [class.active]="activeEmployeeTab === 'job'" type="button" (click)="setEmployeeTab('job')">Job</button>
+                <button [class.active]="activeEmployeeTab === 'attendance'" type="button" (click)="setEmployeeTab('attendance')">Attendance</button>
+                <button [class.active]="activeEmployeeTab === 'timeoff'" type="button" (click)="setEmployeeTab('timeoff')">Time off</button>
+                <button [class.active]="activeEmployeeTab === 'performance'" type="button" (click)="setEmployeeTab('performance')">Performance</button>
+                <button [class.active]="activeEmployeeTab === 'documents'" type="button" (click)="setEmployeeTab('documents')">Documents</button>
+                <button [class.active]="activeEmployeeTab === 'onboarding'" type="button" (click)="setEmployeeTab('onboarding')">Onboarding</button>
+                <button [class.active]="activeEmployeeTab === 'tasks'" type="button" (click)="setEmployeeTab('tasks')">Tasks</button>
+                <button [class.active]="activeEmployeeTab === 'more'" type="button" (click)="setEmployeeTab('more')">More v</button>
+              </nav>
+              @switch (activeEmployeeTab) {
+                @case ('personal') {
+                  <article class="profile-section-card">
+                    <div class="card-header"><h2>Personal</h2></div>
+                    <div class="detail-list">
+                      <div><span>Full name</span><b>{{ selectedEmployee.name }}</b></div>
+                      <div><span>Email</span><b>{{ selectedEmployee.email || '-' }}</b></div>
+                      <div><span>Phone</span><b>{{ selectedEmployee.phone || '-' }}</b></div>
+                      <div><span>Location</span><b>{{ selectedEmployee.location || '-' }}</b></div>
+                    </div>
+                  </article>
+                }
+                @case ('job') {
+                  <article class="profile-section-card">
+                    <div class="card-header"><h2>Job</h2></div>
+                    <div class="job-form">
+                      <label>Hired on<input type="text" [value]="selectedEmployee.hireDate" /></label>
+                      <button class="btn btn-primary" type="button">Save</button>
+                    </div>
+                  </article>
+                  <article class="profile-section-card">
+                    <div class="card-header"><h2>Employment Status</h2><button type="button">Add</button></div>
+                    <div class="detail-list">
+                      <div><span>Status</span><b>{{ selectedEmployee.statusLabel }}</b></div>
+                      <div><span>Manager</span><b>{{ selectedEmployee.manager || 'Not assigned' }}</b></div>
+                      <div><span>Grade</span><b>{{ selectedEmployee.salaryGrade || '-' }}</b></div>
+                    </div>
+                  </article>
+                }
+                @case ('attendance') {
+                  <article class="profile-section-card">
+                    <div class="card-header">
+                      <h2>ZKTeco attendance</h2>
+                      <button type="button" (click)="loadAttendanceHistory()">Refresh</button>
+                    </div>
+                    @if (selectedEmployeeAttendance; as attendance) {
+                      <div class="detail-list">
+                        <div><span>PIN</span><b>{{ attendance.pin }}</b></div>
+                        <div><span>Status</span><b>{{ attendance.status === 'INSIDE' ? 'Inside' : 'Outside' }}</b></div>
+                        <div><span>Last mark</span><b>{{ attendance.eventTime | date:'dd.MM.yyyy HH:mm' }}</b></div>
+                        <div><span>Point</span><b>{{ attendance.eventPointName }}</b></div>
+                      </div>
+                      <div class="attendance-history-tools">
+                        <input type="date" [value]="attendanceSelectedDate" #employeeAttendanceDate (change)="attendanceSelectedDate = employeeAttendanceDate.value; loadAttendanceHistory(attendance.pin)" />
+                      </div>
+                      @for (event of attendanceHistory; track event.eventTime) {
+                        <div class="list-row">
+                          <span>{{ event.eventTime | date:'HH:mm' }} <small>{{ event.eventPointName }}</small></span>
+                          <span class="status" [class.active]="event.status === 'INSIDE'" [class.remote]="event.status === 'OUTSIDE'">{{ event.status }}</span>
+                        </div>
+                      }
+                    } @else {
+                      <p class="muted">No ZKTeco match yet. Set zkteco_pin for this employee or load live attendance.</p>
+                    }
+                  </article>
+                }
+                @case ('timeoff') {
+                  <article class="profile-section-card">
+                    <div class="card-header"><h2>Time off</h2><button type="button">Request</button></div>
+                    <div class="detail-list">
+                      <div><span>Available days</span><b>18</b></div>
+                      <div><span>Planned leave</span><b>4 days</b></div>
+                      <div><span>Sick leave</span><b>0 days</b></div>
+                    </div>
+                  </article>
+                }
+                @case ('performance') {
+                  <article class="profile-section-card">
+                    <div class="card-header"><h2>Performance</h2><button type="button">Add review</button></div>
+                    <div class="detail-list">
+                      <div><span>Last review</span><b>April 2026</b></div>
+                      <div><span>Goal progress</span><b>82%</b></div>
+                      <div><span>Manager score</span><b>Exceeds expectations</b></div>
+                    </div>
+                  </article>
+                }
+                @case ('documents') {
+                  <article class="profile-section-card">
+                    <div class="card-header">
+                      <h2>Documents</h2>
+                      <label class="file-add-btn">
+                        Add
+                        <input type="file" (change)="uploadEmployeeDocument($event, selectedEmployee.id)" />
+                      </label>
+                    </div>
+                    @for (document of selectedEmployeeDocuments; track document.title) {
+                      <div class="list-row">
+                        <span>{{ document.title }} <small>{{ document.type }} @if (document.sizeLabel) { · {{ document.sizeLabel }} }</small></span>
+                        <span class="document-actions">
+                          @if (document.previewUrl || document.storagePath) {
+                            <button type="button" (click)="openDocumentPreview(document)">View</button>
+                          }
+                          <span class="status" [class.active]="document.status === 'active'" [class.remote]="document.status === 'remote'" [class.leave]="document.status === 'leave'">{{ document.statusLabel }}</span>
+                        </span>
+                      </div>
+                    }
+                    @if (previewDocument) {
+                      <div class="document-preview">
+                        <div class="card-header">
+                          <div>
+                            <h2>{{ previewDocument.fileName || previewDocument.title }}</h2>
+                            @if (previewDocument.storagePath) { <span class="muted">{{ previewDocument.storagePath }}</span> }
+                          </div>
+                          <button type="button" (click)="closeDocumentPreview()">Close</button>
+                        </div>
+                        @if (previewDocument.mimeType?.startsWith('image/')) {
+                          <img [src]="previewDocument.previewUrl" [alt]="previewDocument.title" />
+                        } @else if (previewDocument.mimeType === 'application/pdf') {
+                          <iframe [src]="trustedDocumentPreviewUrl(previewDocument)" title="Document preview"></iframe>
+                        } @else {
+                          <p class="muted">Preview is not available for this file type. The file was selected and added to the employee document list.</p>
+                        }
+                        @if (previewDocument.previewUrl) {
+                          <a class="document-open-link" [href]="previewDocument.previewUrl" target="_blank" rel="noopener">Open document in new tab</a>
+                        }
+                      </div>
+                    }
+                  </article>
+                }
+                @case ('onboarding') {
+                  <article class="profile-section-card">
+                    <div class="card-header"><h2>Onboarding</h2><button type="button">Assign checklist</button></div>
+                    <div class="detail-list">
+                      <div><span>Profile setup</span><b>Done</b></div>
+                      <div><span>Equipment</span><b>In progress</b></div>
+                      <div><span>Intro meeting</span><b>Scheduled</b></div>
+                    </div>
+                  </article>
+                }
+                @case ('tasks') {
+                  <article class="profile-section-card">
+                    <div class="card-header"><h2>Tasks</h2><button type="button">Add task</button></div>
+                    <div class="list-row"><span>Update personal data</span><span class="status remote">Open</span></div>
+                    <div class="list-row"><span>Sign updated policy</span><span class="status active">Done</span></div>
+                  </article>
+                }
+                @case ('more') {
+                  <article class="profile-section-card">
+                    <div class="card-header"><h2>More</h2></div>
+                    <div class="detail-list">
+                      <div><span>Assets</span><b>Laptop, access card</b></div>
+                      <div><span>Surveys</span><b>2 completed</b></div>
+                      <div><span>Notes</span><b>No private notes</b></div>
+                    </div>
+                  </article>
+                }
+              }
+            </main>
+          </div>
+        </section>
+      } @else {
+        @switch (activeSection) {
+          @case ('dashboard') {
+            <div class="metrics">
+              <article class="metric"><p class="metric-label">Total employees</p><p class="metric-value">142</p><p class="metric-delta up">+3 this month</p></article>
+              <article class="metric"><p class="metric-label">Active today</p><p class="metric-value">118</p><p class="metric-delta">83% attendance</p></article>
+              <article class="metric"><p class="metric-label">On leave</p><p class="metric-value">14</p><p class="metric-delta down">+2 above norm</p></article>
+              <article class="metric"><p class="metric-label">Open vacancies</p><p class="metric-value">7</p><p class="metric-delta">3 departments</p></article>
+            </div>
+            <div class="grid2">
+              <article class="card">
+                <div class="card-header"><h2>Recent employees</h2><button type="button" (click)="setSection('employees')">Open list</button></div>
+                @for (employee of employees.slice(0, 3); track employee.id) {
+                  <button class="list-row row-button" type="button" (click)="openEmployee(employee.id)">
+                    <span>{{ employee.name }}</span><span class="status" [class.active]="employee.status === 'active'" [class.remote]="employee.status === 'remote'" [class.leave]="employee.status === 'leave'">{{ employee.statusLabel }}</span>
+                  </button>
+                }
+              </article>
+              <article class="card">
+                <div class="card-header"><h2>By departments</h2><button type="button" (click)="setSection('departments')">Details</button></div>
+                <div class="bar-row"><span>Development</span><div><i style="width:75%"></i></div><b>45</b></div>
+                <div class="bar-row"><span>Operations</span><div><i style="width:45%"></i></div><b>27</b></div>
+                <div class="bar-row"><span>Marketing</span><div><i style="width:30%"></i></div><b>18</b></div>
+                <div class="bar-row"><span>HR</span><div><i style="width:18%"></i></div><b>11</b></div>
+              </article>
+            </div>
+          }
+          @case ('employees') {
+            <article class="card table-card">
+              <div class="card-header">
+                <div>
+                  <h2>Employees by department</h2>
+                  <span class="muted">{{ departmentGroups.length }} departments, {{ employees.length }} employees</span>
+                </div>
+                <button class="btn btn-primary" type="button" (click)="openCreateUser()">Создать пользователя AD</button>
+              </div>
+              @if (!employees.length) {
+                <div class="notice">
+                  Сотрудники не загружены. Используйте синхронизацию AD в настройках, ZKTeco здесь не является источником кадров.
+                </div>
+              }
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Employee</th><th>Department</th><th>Position</th><th>Type</th><th>Status</th><th>Hire date</th></tr></thead>
+                  @for (department of departmentGroups; track department.name) {
+                    <tbody>
+                      <tr class="department-row">
+                        <td colspan="6">
+                          <span>{{ department.name }}</span>
+                          <small>{{ department.employees.length }} employees</small>
+                        </td>
+                      </tr>
+                      @for (employee of department.employees; track employee.id) {
+                      <tr class="clickable-row" (click)="openEmployee(employee.id)">
+                        <td>{{ employee.name }}</td><td>{{ employee.department }}</td><td>{{ employee.position }}</td><td>{{ employee.employmentType }}</td>
+                        <td><span class="status" [class.active]="employee.status === 'active'" [class.remote]="employee.status === 'remote'" [class.leave]="employee.status === 'leave'">{{ employee.statusLabel }}</span></td><td>{{ employee.hireDate }}</td>
+                      </tr>
+                      }
+                    </tbody>
+                  }
+                </table>
+              </div>
+            </article>
+          }
+          @case ('documents') {
+            <article class="card table-card">
+              <div class="card-header"><h2>Employee documents</h2><button type="button" (click)="setSection('employees')">Select employee</button></div>
+              @for (employee of employees; track employee.id) {
+                <button class="list-row row-button" type="button" (click)="openEmployee(employee.id)">
+                  <span>{{ employee.name }}</span><span class="muted">{{ documentCount(employee.id) }} documents</span>
+                </button>
+              }
+            </article>
+          }
+          @case ('orgchart') {
+            <article class="org-shell">
+              <div class="org-toolbar">
+                <div class="org-tabs">
+                  <button type="button" (click)="setSection('employees')">Employees</button>
+                  <button type="button" (click)="setSection('departments')">Departments</button>
+                  <button class="active" type="button">Structure</button>
+                </div>
+                <select aria-label="Department filter" #orgDepartmentFilter [value]="selectedOrgDepartmentName" (change)="setOrgDepartment(orgDepartmentFilter.value)">
+                  <option value="all">All departments</option>
+                  @for (department of departmentGroups; track department.name) {
+                    <option [value]="department.name">{{ department.name }}</option>
+                  }
+                </select>
+              </div>
+
+              @if (orgChartRoot; as root) {
+                <div class="org-board">
+                  <div class="org-root-row">
+                    <button class="org-card org-card-root" type="button" (click)="openEmployee(root.id)">
+                      <span class="org-avatar">
+                        @if (photoFor(root)) { <img [src]="photoFor(root)" [alt]="root.name" [style.object-position]="photoPositionFor(root)" /> } @else { {{ initials(root.name) }} }
+                      </span>
+                      <span><strong>{{ root.name }}</strong><small>{{ root.position }}</small></span>
+                    </button>
+                  </div>
+
+                  <div class="org-level" [class.single]="selectedOrgDepartmentName !== 'all'">
+                    @for (branch of visibleOrgChartBranches; track branch.department) {
+                      <section class="org-column">
+                        <button class="org-card org-card-leader" type="button" (click)="openEmployee(branch.leader.id)">
+                          <span class="org-avatar">
+                            @if (photoFor(branch.leader)) { <img [src]="photoFor(branch.leader)" [alt]="branch.leader.name" [style.object-position]="photoPositionFor(branch.leader)" /> } @else { {{ initials(branch.leader.name) }} }
+                          </span>
+                          <span><strong>{{ branch.leader.name }}</strong><small>{{ branch.leader.position }}</small></span>
+                        </button>
+                        <button class="org-department-pill" type="button" (click)="openDepartment(branch.department)">{{ branch.department }}</button>
+                        <div class="org-team">
+                          @for (employee of branch.members; track employee.id) {
+                            <button class="org-card" type="button" (click)="openEmployee(employee.id)">
+                              <span class="org-avatar">
+                                @if (photoFor(employee)) { <img [src]="photoFor(employee)" [alt]="employee.name" [style.object-position]="photoPositionFor(employee)" /> } @else { {{ initials(employee.name) }} }
+                              </span>
+                              <span><strong>{{ employee.name }}</strong><small>{{ employee.position }}</small></span>
+                            </button>
+                          }
+                          @if (branch.extraCount > 0) {
+                            <button class="org-more" type="button" (click)="openDepartment(branch.department)">+{{ branch.extraCount }} more</button>
+                          }
+                        </div>
+                      </section>
+                    }
+                  </div>
+                </div>
+              }
+            </article>
+          }
+          @case ('settings') {
+            <div class="settings-grid">
+              <article class="card">
+                <div class="card-header"><h2>Создание пользователя AD</h2></div>
+                <div class="form-grid">
+                  <label>ФИО<input #newFullName type="text" value="Куралаев Аскар Акатаевич" /></label>
+                  <label>Отдел<input #newDepartment type="text" value="IT" /></label>
+                  <label>Личная почта<input #newPersonalEmail type="email" value="personal@example.com" /></label>
+                </div>
+                <div class="button-row">
+                  <button class="btn btn-primary" type="button" (click)="previewProvisioning(newFullName.value, newDepartment.value, newPersonalEmail.value)">Сгенерировать логин и пароль</button>
+                  <button class="btn btn-primary" type="button" (click)="createProvisionedUser(newFullName.value, newDepartment.value, newPersonalEmail.value)">Создать на сайте</button>
+                </div>
+                @if (provisioningPreview) {
+                  <div class="detail-list integration-preview">
+                    <div><span>Логин</span><b>{{ provisioningPreview.login }}</b></div>
+                    <div><span>Корпоративная почта</span><b>{{ provisioningPreview.corporateEmail }}</b></div>
+                    <div><span>Временный пароль</span><b>{{ provisioningPreview.temporaryPasswordPreview }}</b></div>
+                    <div><span>Режим</span><b>{{ provisioningPreview.dryRun ? 'Проверка без создания' : 'Готово к созданию' }}</b></div>
+                  </div>
+                }
+              </article>
+              <article class="card">
+                <div class="card-header"><h2>Active Directory / LDAP</h2></div>
+                <div class="form-grid">
+                  <label>Server address<input #adUrl type="text" [value]="adSettings.url" /></label>
+                  <label>Base DN<input #baseDn type="text" [value]="adSettings.baseDn" /></label>
+                  <label>Name / Bind user<input #bindDn type="text" [value]="adSettings.bindDn" autocomplete="username" (input)="rememberAdCredentials(bindDn.value, bindPassword.value)" /></label>
+                  <label>Password<input #bindPassword type="password" [value]="adSettings.bindPassword" autocomplete="current-password" placeholder="Enter AD service account password" (input)="rememberAdCredentials(bindDn.value, bindPassword.value)" /></label>
+                  <label>User filter<input #userFilter type="text" [value]="adSettings.userFilter" /></label>
+                  <label>Group filter<input #groupFilter type="text" [value]="adSettings.groupFilter" /></label>
+                </div>
+                <div class="ou-list">
+                  <label>Search base DN<input #ou1 type="text" [value]="adSettings.searchBaseDns[0]" /></label>
+                  <label>Search base DN<input #ou2 type="text" [value]="adSettings.searchBaseDns[1]" /></label>
+                  <label>Search base DN<input #ou3 type="text" [value]="adSettings.searchBaseDns[2]" /></label>
+                  <label>Search base DN<input #ou4 type="text" [value]="adSettings.searchBaseDns[3]" /></label>
+                  <label>Search base DN<input #ou5 type="text" [value]="adSettings.searchBaseDns[4]" /></label>
+                </div>
+                <div class="button-row">
+                  <button class="btn" type="button" (click)="testAdConnection(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value, ou3.value, ou4.value, ou5.value])">Test connection</button>
+                  <button class="btn btn-primary" type="button" (click)="saveAdSettings(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value, ou3.value, ou4.value, ou5.value])">Save settings</button>
+                  <button class="btn btn-primary" type="button" (click)="loadAdEmployees(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value, ou3.value, ou4.value, ou5.value])">Load employees from AD</button>
+                </div>
+              </article>
+              <article class="card">
+                <div class="card-header"><h2>AD mapping to HR</h2></div>
+                <div class="detail-list">
+                  <div><span>sAMAccountName</span><b>Login</b></div>
+                  <div><span>mail</span><b>Email</b></div>
+                  <div><span>department</span><b>Department</b></div>
+                  <div><span>title</span><b>Position</b></div>
+                  <div><span>manager</span><b>Manager</b></div>
+                </div>
+              </article>
+              <article class="card">
+                <div class="card-header"><h2>ZKTeco attendance</h2></div>
+                <div class="detail-list">
+                  <div><span>Host</span><b>{{ zktecoSettings.host }}</b></div>
+                  <div><span>Database</span><b>{{ zktecoSettings.databaseName || 'Set in secrets file' }}</b></div>
+                  <div><span>Username</span><b>{{ zktecoSettings.usernamePlaceholder }}</b></div>
+                  <div><span>Password</span><b>{{ zktecoSettings.passwordPlaceholder }}</b></div>
+                </div>
+              </article>
+              <article class="card">
+                <div class="card-header"><h2>Synology storage</h2></div>
+                <div class="detail-list">
+                  <div><span>Host</span><b>{{ synologySettings.host }}</b></div>
+                  <div><span>Root path</span><b>{{ synologySettings.rootPath }}</b></div>
+                  <div><span>Employee example</span><b>{{ synologySettings.rootPath }}\a.kuralayev</b></div>
+                  <div><span>Credentials</span><b>{{ synologySettings.passwordPlaceholder }}</b></div>
+                </div>
+              </article>
+            </div>
+          }
+          @case ('departments') {
+            @if (selectedDepartment; as department) {
+              <button class="back-btn" type="button" (click)="backToDepartments()">All departments</button>
+              <article class="card table-card department-detail">
+                <div class="card-header">
+                  <div>
+                    <h2>{{ department.name }}</h2>
+                    <span class="muted">{{ department.employees.length }} employees, {{ department.positions.length }} positions</span>
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>Employee</th><th>Position</th><th>Email</th><th>Type</th><th>Status</th><th>Hire date</th></tr></thead>
+                    <tbody>
+                      @for (employee of department.employees; track employee.id) {
+                        <tr class="clickable-row" (click)="openEmployee(employee.id)">
+                          <td>{{ employee.name }}</td><td>{{ employee.position }}</td><td>{{ employee.email }}</td><td>{{ employee.employmentType }}</td>
+                          <td><span class="status" [class.active]="employee.status === 'active'" [class.remote]="employee.status === 'remote'" [class.leave]="employee.status === 'leave'">{{ employee.statusLabel }}</span></td><td>{{ employee.hireDate }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+            } @else {
+              @if (rootDepartmentGroups.length) {
+                <div class="section-kicker">Верхний уровень AD</div>
+                <div class="grid3 departments-root-grid">
+                  @for (department of rootDepartmentGroups; track department.name) {
+                    <button class="card stat-card department-card department-button" type="button" (click)="openDepartment(department.name)">
+                      <h2>{{ department.name }}</h2>
+                      <p class="big">{{ department.employees.length }}</p>
+                      <span>{{ department.positions.slice(0, 3).join(', ') || 'No child departments' }}</span>
+                    </button>
+                  }
+                </div>
+              }
+              <div class="section-kicker">Отделы AD</div>
+              <div class="grid3">
+                @for (department of departmentGroups; track department.name) {
+                  <button class="card stat-card department-card department-button" type="button" (click)="openDepartment(department.name)">
+                    <h2>{{ department.name }}</h2>
+                    <p class="big">{{ department.employees.length }}</p>
+                    <span>{{ department.positions.slice(0, 3).join(', ') || 'No positions specified' }}</span>
+                  </button>
+                }
+              </div>
+            }
+          }
+          @case ('positions') {
+            <article class="card"><div class="card-header"><h2>Positions</h2><button type="button" (click)="handlePrimaryAction()">Create position</button></div><div class="list-row"><span>Senior Developer</span><span class="muted">12 employees</span></div><div class="list-row"><span>HR Manager</span><span class="muted">4 employees</span></div><div class="list-row"><span>Financial analyst</span><span class="muted">6 employees</span></div><div class="list-row"><span>SMM Manager</span><span class="muted">3 employees</span></div></article>
+          }
+          @case ('attendance') {
+            <div class="metrics">
+              <article class="metric"><p class="metric-label">Inside now</p><p class="metric-value">{{ insideCount }}</p><p class="metric-delta up">Live from ZKTeco</p></article>
+              <article class="metric"><p class="metric-label">Outside now</p><p class="metric-value">{{ outsideCount }}</p><p class="metric-delta">Latest exit mark</p></article>
+              <article class="metric"><p class="metric-label">Tracked people</p><p class="metric-value">{{ insideCount + outsideCount }}</p><p class="metric-delta">Only employees matched from AD</p></article>
+              <article class="metric"><p class="metric-label">Updated</p><p class="metric-value">{{ attendanceLastUpdated ? (attendanceLastUpdated | date:'HH:mm') : '--:--' }}</p><p class="metric-delta">Manual refresh available</p></article>
+            </div>
+            <article class="card attendance-board">
+              <div class="card-header">
+                <div>
+                  <h2>ZKTeco live attendance</h2>
+                  <span class="muted">{{ groupedAttendanceEmployees.length }} departments</span>
+                </div>
+                <div class="attendance-actions">
+                  <input type="search" placeholder="Search name, PIN, department" [value]="attendanceSearchText" #attendanceSearch (input)="attendanceSearchText = attendanceSearch.value; applyAttendanceFilters()" />
+                  <button type="button" (click)="loadAttendance()">Refresh</button>
+                </div>
+              </div>
+
+              <div class="attendance-layout">
+                <div class="attendance-groups">
+                  @for (group of groupedAttendanceEmployees; track group.rootDepartment + group.departmentName) {
+                    <section class="attendance-group">
+                      <h3>{{ group.departmentName }} <span>{{ group.employees.length }}</span></h3>
+                      @for (employee of group.employees; track employee.pin) {
+                        <button class="attendance-person" type="button" (click)="openAttendanceEmployee(employee)">
+                          <span class="attendance-avatar">
+                            @if (attendancePhotoUrl(employee)) {
+                              <img [src]="attendancePhotoUrl(employee)" [alt]="employee.name + ' ' + employee.lastName" />
+                            } @else {
+                              {{ attendanceInitials(employee) }}
+                            }
+                          </span>
+                          <span class="attendance-person-main">
+                            <strong>{{ employee.name }} {{ employee.lastName }}</strong>
+                            <small>{{ employee.pin }} · {{ employee.eventTime | date:'dd.MM.yyyy HH:mm' }}</small>
+                          </span>
+                          <span class="status" [class.active]="employee.status === 'INSIDE'" [class.remote]="employee.status === 'OUTSIDE'">{{ employee.status }}</span>
+                        </button>
+                      }
+                    </section>
+                  }
+                </div>
+
+                <aside class="attendance-detail">
+                  @if (selectedAttendanceEmployee; as employee) {
+                    <div class="card-header">
+                      <h2>{{ employee.name }} {{ employee.lastName }}</h2>
+                      <button type="button" (click)="closeAttendanceEmployee()">Close</button>
+                    </div>
+                    <div class="detail-list">
+                      <div><span>PIN</span><b>{{ employee.pin }}</b></div>
+                      <div><span>Status</span><b>{{ employee.status }}</b></div>
+                      <div><span>Department</span><b>{{ employee.departmentName }}</b></div>
+                      <div><span>Point</span><b>{{ employee.eventPointName }}</b></div>
+                    </div>
+                    <div class="attendance-history-tools">
+                      <input type="date" [value]="attendanceSelectedDate" #attendanceDate (change)="attendanceSelectedDate = attendanceDate.value; loadAttendanceHistory(employee.pin)" />
+                      <button type="button" (click)="loadAttendanceHistory(employee.pin)">History</button>
+                    </div>
+                    @for (event of attendanceHistory; track event.eventTime) {
+                      <div class="list-row">
+                        <span>{{ event.eventTime | date:'HH:mm' }} <small>{{ event.areaName }}</small></span>
+                        <span class="status" [class.active]="event.status === 'INSIDE'" [class.remote]="event.status === 'OUTSIDE'">{{ event.status }}</span>
+                      </div>
+                    }
+                  } @else {
+                    <p class="muted">Select an employee to see daily history.</p>
+                  }
+                </aside>
+              </div>
+            </article>
+          }
+          @case ('vacations') {
+            <div class="grid2"><article class="card stat-card"><h2>Planned</h2><p class="big">24</p><span>for May 2026</span></article><article class="card stat-card"><h2>Pending approval</h2><p class="big">6</p><span>waiting for HR decision</span></article></div>
+          }
+          @case ('reports') {
+            <div class="grid3"><article class="card stat-card"><h2>Headcount</h2><p class="big">+2.1%</p><span>quarter growth</span></article><article class="card stat-card"><h2>Retention</h2><p class="big">94%</p><span>employee retention</span></article><article class="card stat-card"><h2>Hiring speed</h2><p class="big">18 days</p><span>average vacancy closing time</span></article></div>
+            <article class="card"><div class="card-header"><h2>Ready reports</h2></div><div class="list-row"><span>Payroll summary</span><button type="button" (click)="openReport('Payroll summary')">Open</button></div><div class="list-row"><span>Attendance export</span><button type="button" (click)="openReport('Attendance export')">Open</button></div><div class="list-row"><span>Vacation balance</span><button type="button" (click)="openReport('Vacation balance')">Open</button></div></article>
+          }
+        }
+      }
+    </section>
+  </main>
+</div>

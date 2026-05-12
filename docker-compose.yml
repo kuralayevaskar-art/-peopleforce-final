@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hr_peopleops_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: hr_peopleops
+      POSTGRES_USER: hr_user
+      POSTGRES_PASSWORD: hr_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
