@@ -110,8 +110,8 @@ public class AttendanceController {
 
     private ResponseEntity<Resource> fetchRemoteZktecoPhoto(String cleanPath) {
         List<String> candidates = List.of(
-                "https://" + zktecoProperties.getHost() + ":8098/" + cleanPath,
-                "https://" + zktecoProperties.getHost() + ":8088/" + cleanPath
+                "https://" + zktecoProperties.getHost() + ":8088/" + cleanPath,
+                "https://" + zktecoProperties.getHost() + ":8098/" + cleanPath
         );
 
         for (String url : candidates) {
@@ -126,7 +126,7 @@ public class AttendanceController {
 
                 if (connection.getResponseCode() >= 200 && connection.getResponseCode() < 300) {
                     byte[] bytes = connection.getInputStream().readAllBytes();
-                    if (bytes.length == 0) {
+                    if (!looksLikeImage(bytes, cleanPath)) {
                         continue;
                     }
                     ByteArrayResource resource = new ByteArrayResource(bytes);
@@ -142,6 +142,20 @@ public class AttendanceController {
         }
 
         return ResponseEntity.notFound().build();
+    }
+
+    private boolean looksLikeImage(byte[] bytes, String path) {
+        if (bytes.length < 4) {
+            return false;
+        }
+        String lowerPath = path.toLowerCase();
+        if (lowerPath.endsWith(".jpg") || lowerPath.endsWith(".jpeg")) {
+            return (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF;
+        }
+        if (lowerPath.endsWith(".png")) {
+            return (bytes[0] & 0xFF) == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
+        }
+        return true;
     }
 
     private MediaType mediaTypeFor(String path, String contentType) {
