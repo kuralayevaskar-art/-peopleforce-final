@@ -540,18 +540,6 @@
                 </div>
               </article>
             } @else {
-              @if (rootDepartmentGroups.length) {
-                <div class="section-kicker">Верхний уровень AD</div>
-                <div class="grid3 departments-root-grid">
-                  @for (department of rootDepartmentGroups; track department.name) {
-                    <button class="card stat-card department-card department-button" type="button" (click)="openDepartment(department.name)">
-                      <h2>{{ department.name }}</h2>
-                      <p class="big">{{ department.employees.length }}</p>
-                      <span>{{ department.positions.slice(0, 3).join(', ') || 'No child departments' }}</span>
-                    </button>
-                  }
-                </div>
-              }
               <div class="section-kicker">Отделы AD</div>
               <div class="grid3">
                 @for (department of departmentGroups; track department.name) {
