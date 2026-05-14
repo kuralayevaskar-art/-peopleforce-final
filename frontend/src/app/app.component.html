@@ -1,14 +1,86 @@
-﻿<h2 class="sr-only">HR PeopleOps Platform</h2>
+<h2 class="sr-only">WK Portal</h2>
+@if (isRegistrationPage) {
+  <main class="registration-public">
+    <section class="registration-panel">
+      <img class="registration-brand" src="/wk-portal-logo.png" alt="WK Portal" />
+      <article class="card auth-card">
+        <div class="card-header"><h2>Регистрация нового сотрудника</h2></div>
+        @if (actionMessage) { <div class="notice">{{ actionMessage }}</div> }
+        <div class="form-grid">
+          <label>First name<input #regFirstName type="text" placeholder="Askar" /></label>
+          <label>Last name<input #regLastName type="text" placeholder="Kuralayev" /></label>
+          <label>Личная почта<input #regEmail type="email" placeholder="personal@example.com" /></label>
+          <label>Отдел
+            <select #regDepartment>
+              @for (department of registrationDepartmentOptions; track department) {
+                <option [value]="department">{{ department }}</option>
+              }
+            </select>
+          </label>
+          <label>Страна
+            <select #regCountry [value]="selectedPhoneCountryCode" (change)="setPhoneCountry(regCountry.value)">
+              @for (country of phoneCountries; track country.code) {
+                <option [value]="country.code">{{ country.flag }} {{ country.name }} {{ country.dialCode }}</option>
+              }
+            </select>
+          </label>
+          <label>Телефон
+            <div class="phone-input">
+              <span>{{ selectedPhoneCountry.dialCode }}</span>
+              <input #regPhone type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="7771234567" (input)="digitsOnly($event)" />
+            </div>
+          </label>
+          <label>Фото/скан удостоверения<input #regIdentityFile type="file" accept="image/*,.pdf" /></label>
+          <label [class.sr-only]="isMobileRegistrationDevice">Фото Face ID<input #regFaceFile type="file" accept="image/*" capture="user" (change)="handleFaceFileSelected(regFaceFile.files)" /></label>
+        </div>
+        <section [class]="faceCaptureClass">
+          <div class="face-capture-head">
+            <div>
+              <strong>Фото Face ID</strong>
+              <span>{{ isMobileRegistrationDevice ? 'Откройте фронтальную камеру телефона.' : 'Можно загрузить файл или сделать фото камерой компьютера.' }}</span>
+            </div>
+            <b>{{ faceCaptureStatus === 'valid' || faceCaptureStatus === 'captured' ? 'OK' : faceCaptureStatus === 'invalid' ? 'Проверьте' : 'Готово' }}</b>
+          </div>
+          <div class="face-camera-frame">
+            <video #faceVideo [class.hidden-preview]="faceCapturePreviewUrl" playsinline muted></video>
+            @if (faceCapturePreviewUrl) {
+              <img [src]="faceCapturePreviewUrl" alt="Face ID preview" />
+            }
+            <div class="face-oval"></div>
+          </div>
+          <canvas #faceCanvas class="sr-only"></canvas>
+          <p class="face-capture-message">{{ faceCaptureMessage }}</p>
+          <div class="button-row">
+            @if (!faceCameraActive && !faceCapturePreviewUrl) {
+              @if (faceCameraSupported) {
+                <button class="btn btn-primary" type="button" (click)="startFaceCamera(faceVideo, faceCanvas)">Открыть камеру</button>
+              } @else {
+                <button class="btn btn-primary" type="button" (click)="regFaceFile.click()">Сделать фото телефоном</button>
+              }
+            }
+            @if (faceCameraActive) {
+              <button class="btn btn-primary" type="button" [disabled]="faceCaptureStatus !== 'valid'" (click)="captureFacePhoto(faceVideo, faceCanvas)">Сделать фото</button>
+              <button class="btn" type="button" (click)="stopFaceCamera()">Закрыть камеру</button>
+            }
+            @if (faceCapturePreviewUrl) {
+              <button class="btn" type="button" (click)="clearCapturedFacePhoto()">Переснять</button>
+            }
+          </div>
+        </section>
+        <div class="button-row">
+          <button class="btn btn-primary" type="button" [disabled]="registrationSubmitting || registrationSubmitted" (click)="submitRegistration(regFirstName.value, regLastName.value, regDepartment.value, regPhone.value, regEmail.value, regIdentityFile.files, regFaceFile.files)">
+            {{ registrationSubmitting ? 'Отправляем...' : (registrationSubmitted ? 'Заявка отправлена' : 'Отправить заявку') }}
+          </button>
+        </div>
+      </article>
+    </section>
+  </main>
+} @else {
 <div class="shell">
   <aside class="sidebar">
     <div class="logo">
       <div class="logo-mark">
-        <div class="logo-name"><span>people</span>force</div>
-      </div>
-      <div class="sidebar-search">
-        <span>Search</span>
-        <input type="search" placeholder="Search..." aria-label="Search" />
-        <kbd>Ctrl K</kbd>
+        <img class="logo-image" src="/wk-portal-logo.png" alt="WK Portal" />
       </div>
     </div>
 
@@ -85,9 +157,8 @@
       } @else if (selectedEmployee) {
         <section class="employee-page">
           <div class="employee-cover">
-            <button class="cover-edit" type="button">Edit cover photo v</button>
             <strong>BUSINESS DRIVEN, PEOPLE FOCUSED</strong>
-            <span>peopleforce</span>
+            <span>WK Portal</span>
           </div>
           <div class="employee-profile">
             <aside class="employee-side">
@@ -147,11 +218,43 @@
                   <p>Location: {{ selectedEmployee.location || 'Location not specified' }}</p>
                 </div>
                 <div class="employee-nav-actions">
-                  <button type="button">Previous</button>
-                  <button type="button">Next</button>
-                  <button type="button">...</button>
+                  @if (isAdminUser) {
+                    <button class="btn btn-primary" type="button" (click)="openEmployeeEdit()">Редактировать</button>
+                  }
                 </div>
               </div>
+              @if (employeeEditDraft) {
+                <article class="profile-section-card employee-edit-form">
+                  <div class="card-header"><h2>Редактирование сотрудника</h2></div>
+                  <div class="form-grid">
+                    <label>ФИО<input #editName type="text" [value]="employeeEditDraft.name || ''" /></label>
+                    <label>Email<input #editEmail type="email" [value]="employeeEditDraft.email || ''" /></label>
+                    <label>Телефон<input #editPhone type="tel" [value]="employeeEditDraft.phone || ''" /></label>
+                    <label>Отдел
+                      <select #editDepartment [value]="employeeEditDraft.department || ''">
+                        @if (!departmentGroups.length) {
+                          <option value="">Список отделов пуст</option>
+                        }
+                        @for (department of departmentGroups; track department.name) {
+                          <option [value]="department.name">{{ department.name }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>Должность<input #editPosition type="text" [value]="employeeEditDraft.position || ''" /></label>
+                    <label>Статус
+                      <select #editStatus [value]="employeeEditDraft.status || 'active'">
+                        <option value="active">Активен</option>
+                        <option value="remote">Удаленно</option>
+                        <option value="leave">Отпуск</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="button-row">
+                    <button class="btn btn-primary" type="button" (click)="saveEmployeeEdit(editName.value, editEmail.value, editPhone.value, editDepartment.value, editPosition.value, editStatus.value)">Сохранить</button>
+                    <button class="btn" type="button" (click)="cancelEmployeeEdit()">Отмена</button>
+                  </div>
+                </article>
+              }
               <nav class="employee-tabs" aria-label="Employee profile tabs">
                 <button [class.active]="activeEmployeeTab === 'personal'" type="button" (click)="setEmployeeTab('personal')">Personal</button>
                 <button [class.active]="activeEmployeeTab === 'job'" type="button" (click)="setEmployeeTab('job')">Job</button>
@@ -220,7 +323,7 @@
                 }
                 @case ('timeoff') {
                   <article class="profile-section-card">
-                    <div class="card-header"><h2>Time off</h2><button type="button">Request</button></div>
+                    <div class="card-header"><h2>Time off</h2></div>
                     <div class="detail-list">
                       <div><span>Available days</span><b>18</b></div>
                       <div><span>Planned leave</span><b>4 days</b></div>
@@ -230,7 +333,7 @@
                 }
                 @case ('performance') {
                   <article class="profile-section-card">
-                    <div class="card-header"><h2>Performance</h2><button type="button">Add review</button></div>
+                    <div class="card-header"><h2>Performance</h2></div>
                     <div class="detail-list">
                       <div><span>Last review</span><b>April 2026</b></div>
                       <div><span>Goal progress</span><b>82%</b></div>
@@ -283,7 +386,7 @@
                 }
                 @case ('onboarding') {
                   <article class="profile-section-card">
-                    <div class="card-header"><h2>Onboarding</h2><button type="button">Assign checklist</button></div>
+                    <div class="card-header"><h2>Onboarding</h2></div>
                     <div class="detail-list">
                       <div><span>Profile setup</span><b>Done</b></div>
                       <div><span>Equipment</span><b>In progress</b></div>
@@ -293,7 +396,7 @@
                 }
                 @case ('tasks') {
                   <article class="profile-section-card">
-                    <div class="card-header"><h2>Tasks</h2><button type="button">Add task</button></div>
+                    <div class="card-header"><h2>Tasks</h2></div>
                     <div class="list-row"><span>Update personal data</span><span class="status remote">Open</span></div>
                     <div class="list-row"><span>Sign updated policy</span><span class="status active">Done</span></div>
                   </article>
@@ -314,6 +417,33 @@
         </section>
       } @else {
         @switch (activeSection) {
+          @case ('registration') {
+            <article class="card auth-card">
+              <div class="card-header"><h2>Регистрация нового сотрудника</h2></div>
+              <div class="form-grid">
+                <label>First name<input #regFirstName type="text" placeholder="Askar" /></label>
+                <label>Last name<input #regLastName type="text" placeholder="Kuralayev" /></label>
+                <label>Отдел
+                  <select #regDepartment>
+                    @for (department of registrationDepartmentOptions; track department) {
+                      <option [value]="department">{{ department }}</option>
+                    }
+                  </select>
+                </label>
+                <label>Телефон<input #regPhone type="tel" placeholder="+7 777 123 45 67" /></label>
+                <label>Личная почта<input #regEmail type="email" placeholder="personal@example.com" /></label>
+                <label>Фото/скан удостоверения<input #regIdentityFile type="file" accept="image/*,.pdf" /></label>
+                <label>Фото Face ID<input #regFaceFile type="file" accept="image/*" /></label>
+              </div>
+              <div class="face-example">
+                <strong>Пример правильного фото для Face ID</strong>
+                <span>Лицо смотрит прямо, хорошо освещено, без других людей и закрывающих лицо предметов.</span>
+              </div>
+              <div class="button-row">
+                <button class="btn btn-primary" type="button" (click)="submitRegistration(regFirstName.value, regLastName.value, regDepartment.value, regPhone.value, regEmail.value, regIdentityFile.files, regFaceFile.files)">Отправить заявку</button>
+              </div>
+            </article>
+          }
           @case ('dashboard') {
             <div class="metrics">
               <article class="metric"><p class="metric-label">Total employees</p><p class="metric-value">142</p><p class="metric-delta up">+3 this month</p></article>
@@ -346,11 +476,13 @@
                   <h2>Employees by department</h2>
                   <span class="muted">{{ departmentGroups.length }} departments, {{ employees.length }} employees</span>
                 </div>
-                <button class="btn btn-primary" type="button" (click)="openCreateUser()">Создать пользователя AD</button>
+                @if (isAdminUser) {
+                  <button class="btn btn-primary" type="button" (click)="setSection('settings')">Заявки и регистрация</button>
+                }
               </div>
               @if (!employees.length) {
                 <div class="notice">
-                  Сотрудники не загружены. Используйте синхронизацию AD в настройках, ZKTeco здесь не является источником кадров.
+                  Список сотрудников загружается из AD автоматически. Если он не появился, проверьте подключение AD в настройках.
                 </div>
               }
               <div class="table-wrap">
@@ -366,7 +498,18 @@
                       </tr>
                       @for (employee of department.employees; track employee.id) {
                       <tr class="clickable-row" (click)="openEmployee(employee.id)">
-                        <td>{{ employee.name }}</td><td>{{ employee.department }}</td><td>{{ employee.position }}</td><td>{{ employee.employmentType }}</td>
+                        <td>
+                          <span class="employee-table-person">
+                            <span class="employee-table-avatar">
+                              @if (photoFor(employee); as employeePhoto) {
+                                <img [src]="employeePhoto" [alt]="employee.name" [style.object-position]="photoPositionFor(employee)" (load)="cacheEmployeePhoto(employee, employeePhoto)" (error)="markEmployeePhotoBroken(employee, employeePhoto)" />
+                              } @else {
+                                {{ initials(employee.name) }}
+                              }
+                            </span>
+                            <span>{{ employee.name }}</span>
+                          </span>
+                        </td><td>{{ employee.department }}</td><td>{{ employee.position }}</td><td>{{ employee.employmentType }}</td>
                         <td><span class="status" [class.active]="employee.status === 'active'" [class.remote]="employee.status === 'remote'" [class.leave]="employee.status === 'leave'">{{ employee.statusLabel }}</span></td><td>{{ employee.hireDate }}</td>
                       </tr>
                       }
@@ -407,7 +550,7 @@
                   <div class="org-root-row">
                     <button class="org-card org-card-root" type="button" (click)="openEmployee(root.id)">
                       <span class="org-avatar">
-                        @if (photoFor(root)) { <img [src]="photoFor(root)" [alt]="root.name" [style.object-position]="photoPositionFor(root)" /> } @else { {{ initials(root.name) }} }
+                        @if (photoFor(root); as rootPhoto) { <img [src]="rootPhoto" [alt]="root.name" [style.object-position]="photoPositionFor(root)" (load)="cacheEmployeePhoto(root, rootPhoto)" (error)="markEmployeePhotoBroken(root, rootPhoto)" /> } @else { {{ initials(root.name) }} }
                       </span>
                       <span><strong>{{ root.name }}</strong><small>{{ root.position }}</small></span>
                     </button>
@@ -418,7 +561,7 @@
                       <section class="org-column">
                         <button class="org-card org-card-leader" type="button" (click)="openEmployee(branch.leader.id)">
                           <span class="org-avatar">
-                            @if (photoFor(branch.leader)) { <img [src]="photoFor(branch.leader)" [alt]="branch.leader.name" [style.object-position]="photoPositionFor(branch.leader)" /> } @else { {{ initials(branch.leader.name) }} }
+                            @if (photoFor(branch.leader); as leaderPhoto) { <img [src]="leaderPhoto" [alt]="branch.leader.name" [style.object-position]="photoPositionFor(branch.leader)" (load)="cacheEmployeePhoto(branch.leader, leaderPhoto)" (error)="markEmployeePhotoBroken(branch.leader, leaderPhoto)" /> } @else { {{ initials(branch.leader.name) }} }
                           </span>
                           <span><strong>{{ branch.leader.name }}</strong><small>{{ branch.leader.position }}</small></span>
                         </button>
@@ -427,7 +570,7 @@
                           @for (employee of branch.members; track employee.id) {
                             <button class="org-card" type="button" (click)="openEmployee(employee.id)">
                               <span class="org-avatar">
-                                @if (photoFor(employee)) { <img [src]="photoFor(employee)" [alt]="employee.name" [style.object-position]="photoPositionFor(employee)" /> } @else { {{ initials(employee.name) }} }
+                                @if (photoFor(employee); as memberPhoto) { <img [src]="memberPhoto" [alt]="employee.name" [style.object-position]="photoPositionFor(employee)" (load)="cacheEmployeePhoto(employee, memberPhoto)" (error)="markEmployeePhotoBroken(employee, memberPhoto)" /> } @else { {{ initials(employee.name) }} }
                               </span>
                               <span><strong>{{ employee.name }}</strong><small>{{ employee.position }}</small></span>
                             </button>
@@ -444,17 +587,149 @@
             </article>
           }
           @case ('settings') {
+            <div class="settings-tabs" role="tablist" aria-label="Настройки">
+              <button type="button" [class.active]="activeSettingsTab === 'ad'" (click)="setSettingsTab('ad')">Настройка AD</button>
+              <button type="button" [class.active]="activeSettingsTab === 'registration'" (click)="setSettingsTab('registration')">Регистрация пользователей</button>
+              <button type="button" [class.active]="activeSettingsTab === 'requests'" (click)="setSettingsTab('requests')">Заявки на регистрацию</button>
+              <button type="button" [class.active]="activeSettingsTab === 'users'" (click)="setSettingsTab('users')">Пользователи системы</button>
+              <button type="button" [class.active]="activeSettingsTab === 'integrations'" (click)="setSettingsTab('integrations')">ZKT и хранилище</button>
+            </div>
             <div class="settings-grid">
+              @if (activeSettingsTab === 'registration') {
+              <article class="card">
+                <div class="card-header"><h2>Регистрация по ссылке</h2></div>
+                <p class="muted">Создайте одноразовую ссылку для нового сотрудника. Заявка появится у администратора после заполнения формы.</p>
+                <div class="button-row">
+                  <button class="btn btn-primary" type="button" (click)="createRegistrationLink()">Создать ссылку</button>
+                  <button class="btn" type="button" (click)="setSettingsTab('requests')">Заявки</button>
+                </div>
+                @if (registrationLink) {
+                  <div class="detail-list integration-preview">
+                    <div><span>Ссылка</span><b>{{ registrationLink }}</b></div>
+                  </div>
+                }
+              </article>
+              }
+              @if (activeSettingsTab === 'requests') {
+              <article class="card registration-admin-card">
+                <div class="card-header">
+                  <h2>Заявки на регистрацию</h2>
+                  <button type="button" (click)="loadRegistrationRequests()">Обновить</button>
+                </div>
+                @if (!registrationRequests.length) {
+                  <p class="muted">Пока нет заявок. После отправки формы заявка появится здесь.</p>
+                }
+                @for (request of registrationRequests; track request.id) {
+                  <div
+                    class="list-row row-button registration-request-row"
+                    role="button"
+                    tabindex="0"
+                    [class.selected]="selectedRegistrationRequest?.id === request.id"
+                    (click)="openRegistrationRequest(request)"
+                    (keydown.enter)="openRegistrationRequest(request)">
+                    <span>
+                      {{ request.fullName }}
+                      <small>{{ request.personalEmail }}</small>
+                      <small>{{ request.department || 'Отдел не указан' }}</small>
+                    </span>
+                    <span class="registration-request-actions">
+                      <span class="muted">Открыть</span>
+                      <span class="status" [class.active]="request.status === 'PENDING'" [class.remote]="request.status !== 'PENDING'">{{ request.status }}</span>
+                    </span>
+                  </div>
+                }
+                @if (selectedRegistrationRequest) {
+                  <div class="registration-request-preview">
+                    <div class="card-header">
+                      <h2>{{ selectedRegistrationRequest.fullName }}</h2>
+                      <button type="button" (click)="closeRegistrationRequest()">Закрыть</button>
+                    </div>
+                    <div class="detail-list">
+                      <div><span>First name</span><b>{{ selectedRegistrationRequest.firstName || '-' }}</b></div>
+                      <div><span>Last name</span><b>{{ selectedRegistrationRequest.lastName || '-' }}</b></div>
+                      <div>
+                        <span>Отдел</span>
+                        <b>
+                          <select #approvalDepartment [value]="selectedRegistrationRequest.department || registrationDepartmentOptions[0]">
+                            @for (department of registrationDepartmentOptions; track department) {
+                              <option [value]="department">{{ department }}</option>
+                            }
+                          </select>
+                        </b>
+                      </div>
+                      <div><span>Телефон</span><b>{{ selectedRegistrationRequest.phone }}</b></div>
+                      <div><span>Личная почта</span><b>{{ selectedRegistrationRequest.personalEmail }}</b></div>
+                      <div><span>Статус</span><b>{{ selectedRegistrationRequest.status }}</b></div>
+                      <div><span>Корпоративная почта</span><b>{{ selectedRegistrationRequest.corporateEmail || '-' }}</b></div>
+                      @if (selectedRegistrationRequest.rejectionReason) {
+                        <div><span>Ошибка/причина</span><b>{{ selectedRegistrationRequest.rejectionReason }}</b></div>
+                      }
+                    </div>
+                    <div class="button-row">
+                      <button class="btn" type="button" (click)="openRegistrationFile(selectedRegistrationRequest.identityDocumentFileId)">Открыть удостоверение</button>
+                      <button class="btn" type="button" (click)="openRegistrationFile(selectedRegistrationRequest.facePhotoFileId)">Открыть Face ID</button>
+                    </div>
+                    @if (canProcessRegistrationRequest(selectedRegistrationRequest)) {
+                      <div class="button-row">
+                        <button class="btn btn-primary" type="button" (click)="approveRegistrationRequest(selectedRegistrationRequest.id, approvalDepartment.value)">Одобрить</button>
+                        <button class="btn" type="button" (click)="rejectRegistrationRequest(selectedRegistrationRequest.id)">Отклонить</button>
+                      </div>
+                    }
+                  </div>
+                }
+              </article>
+              }
+              @if (activeSettingsTab === 'users') {
+              <article class="card admin-users-card">
+                <div class="card-header">
+                  <div>
+                    <h2>Пользователи системы</h2>
+                    <span class="muted">Блокировка запрещает вход на сайт через пароль и AD.</span>
+                  </div>
+                  <button type="button" (click)="loadAdminUsers()">Обновить</button>
+                </div>
+                @if (!adminUsers.length) {
+                  <p class="muted">Пользователи не загружены.</p>
+                }
+                <div class="admin-user-list">
+                  @for (user of adminUsers; track user.id) {
+                    <div class="admin-user-row">
+                      <span class="admin-user-avatar">{{ user.email.slice(0, 1).toUpperCase() }}</span>
+                      <span class="admin-user-main">
+                        <strong>{{ user.email }}</strong>
+                        <small>{{ user.roles.join(', ') || 'Без роли' }}</small>
+                        <small>Ошибок входа: {{ user.failedLoginAttempts || 0 }} @if (user.lockedAt) { / заблокирован {{ user.lockedAt | date:'dd.MM.yyyy HH:mm' }} }</small>
+                      </span>
+                      <span class="status" [class.active]="user.status === 'ACTIVE'" [class.leave]="user.status !== 'ACTIVE'">{{ user.status }}</span>
+                      @if (user.status === 'ACTIVE') {
+                        <button class="btn danger-btn" type="button" (click)="setUserBlocked(user, true)">Блокировать</button>
+                      } @else {
+                        <button class="btn btn-primary" type="button" (click)="setUserBlocked(user, false)">Разблокировать</button>
+                      }
+                    </div>
+                  }
+                </div>
+              </article>
+              }
+              @if (activeSettingsTab === 'registration') {
               <article class="card">
                 <div class="card-header"><h2>Создание пользователя AD</h2></div>
                 <div class="form-grid">
                   <label>ФИО<input #newFullName type="text" value="Куралаев Аскар Акатаевич" /></label>
-                  <label>Отдел<input #newDepartment type="text" value="IT" /></label>
+                  <label>Отдел
+                    <select #newDepartment>
+                      @if (!departmentGroups.length) {
+                        <option value="">Список отделов пуст. Добавьте отделы в настройках системы.</option>
+                      }
+                      @for (department of departmentGroups; track department.name) {
+                        <option [value]="department.name">{{ department.name }}</option>
+                      }
+                    </select>
+                  </label>
                   <label>Личная почта<input #newPersonalEmail type="email" value="personal@example.com" /></label>
                 </div>
                 <div class="button-row">
                   <button class="btn btn-primary" type="button" (click)="previewProvisioning(newFullName.value, newDepartment.value, newPersonalEmail.value)">Сгенерировать логин и пароль</button>
-                  <button class="btn btn-primary" type="button" (click)="createProvisionedUser(newFullName.value, newDepartment.value, newPersonalEmail.value)">Создать на сайте</button>
                 </div>
                 @if (provisioningPreview) {
                   <div class="detail-list integration-preview">
@@ -465,13 +740,16 @@
                   </div>
                 }
               </article>
+              }
+              @if (activeSettingsTab === 'ad') {
               <article class="card">
                 <div class="card-header"><h2>Active Directory / LDAP</h2></div>
+                <p class="muted">Логин и пароль сервисного аккаунта backend берет из application-secrets.properties. Здесь меняются только адрес, Base DN, фильтры и OU.</p>
                 <div class="form-grid">
                   <label>Server address<input #adUrl type="text" [value]="adSettings.url" /></label>
                   <label>Base DN<input #baseDn type="text" [value]="adSettings.baseDn" /></label>
-                  <label>Name / Bind user<input #bindDn type="text" [value]="adSettings.bindDn" autocomplete="username" (input)="rememberAdCredentials(bindDn.value, bindPassword.value)" /></label>
-                  <label>Password<input #bindPassword type="password" [value]="adSettings.bindPassword" autocomplete="current-password" placeholder="Enter AD service account password" (input)="rememberAdCredentials(bindDn.value, bindPassword.value)" /></label>
+                  <label>Service account<input #bindDn type="text" [value]="adSettings.bindDn" readonly /></label>
+                  <label>Password<input #bindPassword type="password" value="" placeholder="Хранится в secrets-файле" readonly /></label>
                   <label>User filter<input #userFilter type="text" [value]="adSettings.userFilter" /></label>
                   <label>Group filter<input #groupFilter type="text" [value]="adSettings.groupFilter" /></label>
                 </div>
@@ -482,7 +760,6 @@
                 <div class="button-row">
                   <button class="btn" type="button" (click)="testAdConnection(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value])">Test connection</button>
                   <button class="btn btn-primary" type="button" (click)="saveAdSettings(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value])">Save settings</button>
-                  <button class="btn btn-primary" type="button" (click)="loadAdEmployees(adUrl.value, baseDn.value, bindDn.value, bindPassword.value, userFilter.value, groupFilter.value, [ou1.value, ou2.value])">Load employees from AD</button>
                 </div>
               </article>
               <article class="card">
@@ -495,6 +772,8 @@
                   <div><span>manager</span><b>Manager</b></div>
                 </div>
               </article>
+              }
+              @if (activeSettingsTab === 'integrations') {
               <article class="card">
                 <div class="card-header"><h2>ZKTeco attendance</h2></div>
                 <div class="detail-list">
@@ -513,6 +792,7 @@
                   <div><span>Credentials</span><b>{{ synologySettings.passwordPlaceholder }}</b></div>
                 </div>
               </article>
+              }
             </div>
           }
           @case ('departments') {
@@ -541,13 +821,46 @@
               </article>
             } @else {
               <div class="section-kicker">Отделы AD</div>
-              <div class="grid3">
+              @if (isAdminUser) {
+                <div class="notice">Перетащите карточку сотрудника в другой отдел. Система сразу поменяет отдел и руководителя на странице и отправит изменение в AD.</div>
+              }
+              <div class="department-move-board">
                 @for (department of departmentGroups; track department.name) {
-                  <button class="card stat-card department-card department-button" type="button" (click)="openDepartment(department.name)">
-                    <h2>{{ department.name }}</h2>
-                    <p class="big">{{ department.employees.length }}</p>
-                    <span>{{ department.positions.slice(0, 3).join(', ') || 'No positions specified' }}</span>
-                  </button>
+                  <section class="department-drop-card"
+                    [class.drop-ready]="draggedEmployeeId !== null"
+                    (dragover)="allowDepartmentDrop($event)"
+                    (drop)="dropEmployeeToDepartment($event, department.name)">
+                    <button class="department-card-heading" type="button" (click)="openDepartment(department.name)">
+                      <span>
+                        <strong>{{ department.name }}</strong>
+                        <small>{{ department.positions.slice(0, 3).join(', ') || 'No positions specified' }}</small>
+                      </span>
+                      <b>{{ department.employees.length }}</b>
+                    </button>
+                    <div class="department-people">
+                      @for (employee of department.employees; track employee.id) {
+                        <button class="department-person-card"
+                          type="button"
+                          [attr.draggable]="isAdminUser ? 'true' : null"
+                          (dragstart)="startEmployeeDrag($event, employee)"
+                          (dragend)="clearEmployeeDrag()"
+                          (click)="openEmployee(employee.id)">
+                          <span class="employee-table-avatar">
+                            @if (photoFor(employee); as employeePhoto) {
+                              <img [src]="employeePhoto" [alt]="employee.name" [style.object-position]="photoPositionFor(employee)" (load)="cacheEmployeePhoto(employee, employeePhoto)" (error)="markEmployeePhotoBroken(employee, employeePhoto)" />
+                            } @else {
+                              {{ initials(employee.name) }}
+                            }
+                          </span>
+                          <span>
+                            <strong>{{ employee.name }}</strong>
+                            <small>{{ employee.position }}</small>
+                            <small>Руководитель: {{ employee.manager || 'не назначен' }}</small>
+                          </span>
+                        </button>
+                      }
+                    </div>
+                  </section>
                 }
               </div>
             }
@@ -593,8 +906,8 @@
                       @for (employee of group.employees; track employee.pin) {
                         <button class="attendance-person" type="button" (click)="openAttendanceEmployee(employee)">
                           <span class="attendance-avatar">
-                            @if (attendancePhotoUrl(employee)) {
-                              <img [src]="attendancePhotoUrl(employee)" [alt]="employee.name + ' ' + employee.lastName" />
+                            @if (attendancePhotoSrc(employee); as attendancePhoto) {
+                              <img [src]="attendancePhoto" [alt]="employee.name + ' ' + employee.lastName" />
                             } @else {
                               {{ attendanceInitials(employee) }}
                             }
@@ -651,3 +964,4 @@
     </section>
   </main>
 </div>
+}

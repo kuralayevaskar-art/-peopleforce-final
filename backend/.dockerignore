@@ -1,0 +1,5 @@
+target
+.mvn/wrapper/maven-wrapper.jar
+*.log
+application-secrets.properties
+src/main/resources/application-secrets.properties

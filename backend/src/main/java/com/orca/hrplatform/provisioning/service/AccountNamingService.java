@@ -20,6 +20,15 @@ public class AccountNamingService {
         return (firstInitial + "." + lastName).toLowerCase(Locale.ROOT);
     }
 
+    public String generateLogin(String firstName, String lastName) {
+        String normalizedFirst = normalize(firstName);
+        String normalizedLast = normalize(lastName);
+        if (!StringUtils.hasText(normalizedFirst) || !StringUtils.hasText(normalizedLast)) {
+            return generateLogin((lastName + " " + firstName).trim());
+        }
+        return (normalizedFirst.substring(0, 1) + "." + normalizedLast).toLowerCase(Locale.ROOT);
+    }
+
     public String generateEmail(String login, String domain) {
         return login + "@" + domain;
     }

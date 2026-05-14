@@ -12,14 +12,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProvisioningPreviewService {
     private final AccountNamingService accountNamingService;
-    private final TemporaryPasswordService temporaryPasswordService;
     private final SynologyPathService synologyPathService;
     private final ProvisioningProperties provisioningProperties;
 
     public ProvisionUserPreviewResponse preview(ProvisionUserRequest request) {
         String login = accountNamingService.generateLogin(request.getFullName());
         String email = accountNamingService.generateEmail(login, provisioningProperties.getDefaultDomain());
-        String temporaryPassword = temporaryPasswordService.generate();
         List<String> folders = synologyPathService.employeeFolders(login);
 
         return ProvisionUserPreviewResponse.builder()
@@ -28,7 +26,7 @@ public class ProvisioningPreviewService {
                 .corporateEmail(email)
                 .personalEmail(request.getPersonalEmail())
                 .department(request.getDepartment())
-                .temporaryPasswordPreview(temporaryPassword)
+                .temporaryPasswordPreview("Будет сгенерирован при создании и отправлен пользователю один раз")
                 .dryRun(provisioningProperties.isDryRun())
                 .synologyFolders(folders)
                 .plannedActions(List.of(

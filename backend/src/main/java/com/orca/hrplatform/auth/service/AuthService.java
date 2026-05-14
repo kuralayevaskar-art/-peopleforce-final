@@ -7,6 +7,7 @@ import com.orca.hrplatform.auth.entity.User;
 import com.orca.hrplatform.auth.entity.UserStatus;
 import com.orca.hrplatform.auth.repository.RoleRepository;
 import com.orca.hrplatform.auth.repository.UserRepository;
+import com.orca.hrplatform.audit.service.AuditLogService;
 import com.orca.hrplatform.employee.entity.Employee;
 import com.orca.hrplatform.employee.repository.EmployeeRepository;
 import com.orca.hrplatform.integration.ad.config.AdProperties;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -38,56 +40,80 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogService auditLogService;
 
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+        try {
+            User user = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new BadCredentialsException("Account is not active");
+            if (user.getStatus() != UserStatus.ACTIVE) {
+                throw new BadCredentialsException("Account is not active");
+            }
+
+            if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+                registerFailedLogin(user);
+                throw new BadCredentialsException("Invalid email or password");
+            }
+
+            user.setLastLoginAt(LocalDateTime.now());
+            user.setFailedLoginAttempts(0);
+            user.setLockedAt(null);
+            userRepository.save(user);
+
+            String accessToken = jwtService.generateAccessToken(user);
+            String refreshToken = refreshTokenService.createRefreshToken(user);
+
+            auditLogService.login(request.getEmail(), true, null, null);
+            return LoginResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .expiresIn(jwtService.getExpirationSeconds())
+                    .user(convertToAuthUserResponse(user))
+                    .build();
+        } catch (RuntimeException ex) {
+            auditLogService.login(request.getEmail(), false, ex.getMessage(), null);
+            throw ex;
         }
-
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new BadCredentialsException("Invalid email or password");
-        }
-
-        user.setLastLoginAt(LocalDateTime.now());
-        userRepository.save(user);
-
-        String accessToken = jwtService.generateAccessToken(user);
-        String refreshToken = refreshTokenService.createRefreshToken(user);
-
-        return LoginResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .expiresIn(jwtService.getExpirationSeconds())
-                .user(convertToAuthUserResponse(user))
-                .build();
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public LoginResponse loginWithAd(AdLoginRequest request) {
-        AdDirectoryService.AdUser adUser = adDirectoryService.authenticate(request.getUsername(), request.getPassword());
-        User user = userRepository.findByEmail(adUser.getEmail())
-                .orElseGet(() -> createLocalUserFromAd(adUser));
+        try {
+            AdDirectoryService.AdUser adUser;
+            try {
+                adUser = adDirectoryService.authenticate(request.getUsername(), request.getPassword());
+            } catch (Exception ex) {
+                registerFailedLogin(request.getUsername());
+                throw new BadCredentialsException("Invalid AD username or password", ex);
+            }
+            User user = userRepository.findByEmail(adUser.getEmail())
+                    .orElseGet(() -> createLocalUserFromAd(adUser));
 
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new BadCredentialsException("Account is not active");
+            if (user.getStatus() != UserStatus.ACTIVE) {
+                throw new BadCredentialsException("Account is not active");
+            }
+
+            user.setLastLoginAt(LocalDateTime.now());
+            user.setFailedLoginAttempts(0);
+            user.setLockedAt(null);
+            userRepository.save(user);
+
+            String accessToken = jwtService.generateAccessToken(user);
+            String refreshToken = refreshTokenService.createRefreshToken(user);
+
+            auditLogService.login(request.getUsername(), true, null, null);
+            return LoginResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .expiresIn(jwtService.getExpirationSeconds())
+                    .user(convertToAuthUserResponse(user))
+                    .build();
+        } catch (RuntimeException ex) {
+            auditLogService.login(request.getUsername(), false, ex.getMessage(), null);
+            throw ex;
         }
-
-        user.setLastLoginAt(LocalDateTime.now());
-        userRepository.save(user);
-
-        String accessToken = jwtService.generateAccessToken(user);
-        String refreshToken = refreshTokenService.createRefreshToken(user);
-
-        return LoginResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .expiresIn(jwtService.getExpirationSeconds())
-                .user(convertToAuthUserResponse(user))
-                .build();
     }
 
     @Transactional
@@ -150,6 +176,27 @@ public class AuthService {
                 .build();
     }
 
+    private void registerFailedLogin(String login) {
+        if (login == null || login.isBlank()) {
+            return;
+        }
+        userRepository.findByEmail(login.trim().toLowerCase()).ifPresent(this::registerFailedLogin);
+    }
+
+    private void registerFailedLogin(User user) {
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            return;
+        }
+        int attempts = (user.getFailedLoginAttempts() == null ? 0 : user.getFailedLoginAttempts()) + 1;
+        user.setFailedLoginAttempts(attempts);
+        if (attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+            user.setStatus(UserStatus.BLOCKED);
+            user.setLockedAt(LocalDateTime.now());
+            auditLogService.failure(user, "AUTO_BLOCK_USER_AFTER_FAILED_LOGINS", user.getId(), user.getEmployeeId(), "Too many failed login attempts");
+        }
+        userRepository.save(user);
+    }
+
     private User createLocalUserFromAd(AdDirectoryService.AdUser adUser) {
         UUID companyId = userRepository.findAll().stream()
                 .findFirst()
@@ -158,9 +205,13 @@ public class AuthService {
 
         User user = User.builder()
                 .companyId(companyId)
+                .employeeId(employeeRepository.findFirstByAdUsernameIgnoreCaseOrEmailIgnoreCase(adUser.getUsername(), adUser.getEmail())
+                        .map(Employee::getId)
+                        .orElse(null))
                 .email(adUser.getEmail())
                 .passwordHash(passwordEncoder.encode(UUID.randomUUID().toString()))
                 .status(UserStatus.ACTIVE)
+                .failedLoginAttempts(0)
                 .roles(new HashSet<>())
                 .build();
 

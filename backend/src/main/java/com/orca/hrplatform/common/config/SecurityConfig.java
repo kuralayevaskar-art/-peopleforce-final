@@ -39,9 +39,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/health", "/health").permitAll()
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/ad/login", "/api/v1/auth/refresh", "/auth/login", "/auth/ad/login", "/auth/refresh").permitAll()
-                .requestMatchers(HttpMethod.GET, "/attendance/**", "/api/v1/attendance/**").permitAll()
-                .requestMatchers("/employees/*/files/**", "/api/v1/employees/*/files/**").permitAll()
-                .requestMatchers("/admin/integrations/ad/**", "/api/v1/admin/integrations/ad/**").permitAll()
+                .requestMatchers("/registration/**", "/api/v1/registration/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/attendance/photo", "/api/v1/attendance/photo").permitAll()
                 .requestMatchers("/api/v1/auth/logout", "/api/v1/auth/me", "/auth/logout", "/auth/me").authenticated()
                 .requestMatchers("/admin/**", "/api/v1/admin/**").hasAnyRole("SUPER_ADMIN", "HR_ADMIN", "INTEGRATION_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/attendance/import", "/api/v1/attendance/import").hasAnyRole("SUPER_ADMIN", "HR_ADMIN", "INTEGRATION_ADMIN")
@@ -70,7 +69,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
+        configuration.setAllowedOriginPatterns(List.of(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "http://test.dmuk.kz",
+                "https://test.dmuk.kz",
+                "http://*.dmuk.kz",
+                "https://*.dmuk.kz"
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

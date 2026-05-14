@@ -16,6 +16,7 @@ public class AdProperties {
     private String baseDn;
     private String bindDn;
     private String bindPassword;
+    private String bindDomain = "dmuk.edu.kz";
     private String userFilter = "(sAMAccountName={0})";
     private String groupFilter = "(&(objectClass=group)(member={0}))";
     private String defaultRoleCode = "HR_MANAGER";

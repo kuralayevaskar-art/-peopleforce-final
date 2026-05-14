@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import javax.naming.directory.SearchControls;
+import java.util.Base64;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -48,14 +49,21 @@ public class AdDirectoryService {
             throw new BadCredentialsException("Password is required");
         }
 
-        AdUser user = findUser(username, properties);
+        String loginPrincipal = username.contains("@") ? username : username + "@" + domainFromBaseDn(properties.getBaseDn());
         try {
-            buildTemplate(properties.getUrl(), user.getDn(), password).getContextSource().getContext(user.getDn(), password).close();
+            buildTemplate(properties.getUrl(), loginPrincipal, password).getContextSource().getContext(loginPrincipal, password).close();
         } catch (Exception ex) {
             throw new BadCredentialsException("Invalid AD username or password");
         }
 
-        return user;
+        AdProperties userBound = new AdProperties();
+        userBound.setEnabled(true);
+        userBound.setUrl(properties.getUrl());
+        userBound.setBaseDn(properties.getBaseDn());
+        userBound.setBindDn(loginPrincipal);
+        userBound.setBindPassword(password);
+        userBound.setSearchBaseDns(properties.getSearchBaseDns());
+        return findUser(username, userBound);
     }
 
     public AdConnectionTestResponse test(AdSettingsRequest request) {
@@ -106,9 +114,49 @@ public class AdDirectoryService {
                 .toList();
     }
 
+    public AdUserPhoto loadUserPhoto(String username) {
+        if (!properties.isEnabled()) {
+            throw new BadCredentialsException("AD integration is disabled");
+        }
+        AdUser user = findUser(username, properties);
+        LdapTemplate template = buildTemplate(properties.getUrl(), properties.getBindDn(), properties.getBindPassword());
+        String filter = properties.getUserFilter().replace("{0}", username).replace("{username}", username);
+
+        ContextMapper<AdUserPhoto> mapper = context -> {
+            DirContextAdapter adapter = (DirContextAdapter) context;
+            byte[] photo = bytes(adapter.getObjectAttribute("thumbnailPhoto"));
+            String extension = ".jpg";
+            if (photo == null || photo.length == 0) {
+                photo = bytes(adapter.getObjectAttribute("jpegPhoto"));
+            }
+            if (photo == null || photo.length == 0) {
+                photo = bytes(adapter.getObjectAttribute("photo"));
+            }
+            return AdUserPhoto.builder()
+                    .username(user.getUsername())
+                    .email(user.getEmail())
+                    .displayName(user.getDisplayName())
+                    .content(photo)
+                    .extension(extension)
+                    .build();
+        };
+
+        for (String searchBase : searchBases(properties)) {
+            List<AdUserPhoto> photos = template.search(searchBase, filter, SearchControls.SUBTREE_SCOPE, mapper);
+            if (!photos.isEmpty()) {
+                AdUserPhoto photo = photos.getFirst();
+                if (photo.getContent() == null || photo.getContent().length == 0) {
+                    throw new IllegalStateException("AD user has no thumbnailPhoto/jpegPhoto/photo: " + username);
+                }
+                return photo;
+            }
+        }
+        throw new BadCredentialsException("AD user not found");
+    }
+
     private AdUser findUser(String username, AdProperties effective) {
         LdapTemplate template = buildTemplate(effective.getUrl(), effective.getBindDn(), effective.getBindPassword());
-        String filter = effective.getUserFilter().replace("{0}", username).replace("{username}", username);
+        String filter = userLookupFilter(username);
         List<String> searchBases = searchBases(effective);
 
         ContextMapper<AdUser> mapper = context -> {
@@ -149,12 +197,39 @@ public class AdDirectoryService {
         return new LdapTemplate(contextSource);
     }
 
+    private String userLookupFilter(String username) {
+        String login = username == null ? "" : username.trim();
+        String shortLogin = login.contains("@") ? login.substring(0, login.indexOf('@')) : login;
+        return "(|(sAMAccountName=" + ldapEscape(shortLogin) + ")(userPrincipalName=" + ldapEscape(login) + ")(mail=" + ldapEscape(login) + "))";
+    }
+
+    private String ldapEscape(String value) {
+        return nullSafe(value)
+                .replace("\\", "\\5c")
+                .replace("*", "\\2a")
+                .replace("(", "\\28")
+                .replace(")", "\\29")
+                .replace("\u0000", "\\00");
+    }
+
+    private String domainFromBaseDn(String baseDn) {
+        List<String> parts = new ArrayList<>();
+        for (String part : nullSafe(baseDn).split(",")) {
+            String trimmed = part.trim();
+            if (trimmed.regionMatches(true, 0, "DC=", 0, 3)) {
+                parts.add(trimmed.substring(3).toLowerCase(Locale.ROOT));
+            }
+        }
+        return parts.isEmpty() ? "dmuk.edu.kz" : String.join(".", parts);
+    }
+
     private AdProperties copyFromRequest(AdSettingsRequest request) {
         AdProperties effective = new AdProperties();
         effective.setEnabled(true);
         effective.setUrl(StringUtils.hasText(request.getUrl()) ? request.getUrl() : properties.getUrl());
         effective.setBaseDn(StringUtils.hasText(request.getBaseDn()) ? request.getBaseDn() : properties.getBaseDn());
-        effective.setBindDn(StringUtils.hasText(request.getBindDn()) ? request.getBindDn() : properties.getBindDn());
+        effective.setBindDomain(properties.getBindDomain());
+        effective.setBindDn(normalizeBindPrincipal(StringUtils.hasText(request.getBindDn()) ? request.getBindDn() : properties.getBindDn()));
         effective.setBindPassword(StringUtils.hasText(request.getBindPassword()) ? request.getBindPassword() : properties.getBindPassword());
         effective.setUserFilter(StringUtils.hasText(request.getUserFilter()) ? request.getUserFilter() : properties.getUserFilter());
         effective.setGroupFilter(StringUtils.hasText(request.getGroupFilter()) ? request.getGroupFilter() : properties.getGroupFilter());
@@ -163,6 +238,19 @@ public class AdDirectoryService {
                 ? request.getSearchBaseDns()
                 : properties.getSearchBaseDns());
         return effective;
+    }
+
+    private String normalizeBindPrincipal(String bindDn) {
+        String value = nullSafe(bindDn).trim();
+        if (!StringUtils.hasText(value)
+                || value.contains("@")
+                || value.contains("\\")
+                || value.regionMatches(true, 0, "CN=", 0, 3)
+                || value.regionMatches(true, 0, "LDAP://", 0, 7)) {
+            return value;
+        }
+        String domain = StringUtils.hasText(properties.getBindDomain()) ? properties.getBindDomain() : "dmuk.edu.kz";
+        return value + "@" + domain;
     }
 
     private List<String> searchBases(AdProperties effective) {
@@ -232,6 +320,20 @@ public class AdDirectoryService {
         return value == null ? "" : value;
     }
 
+    private byte[] bytes(Object value) {
+        if (value instanceof byte[] bytes) {
+            return bytes;
+        }
+        if (value instanceof String text && StringUtils.hasText(text)) {
+            try {
+                return Base64.getDecoder().decode(text);
+            } catch (Exception ignored) {
+                return text.getBytes();
+            }
+        }
+        return null;
+    }
+
     @Data
     @Builder
     public static class AdUser {
@@ -242,5 +344,15 @@ public class AdDirectoryService {
         private String department;
         private String title;
         private String manager;
+    }
+
+    @Data
+    @Builder
+    public static class AdUserPhoto {
+        private String username;
+        private String email;
+        private String displayName;
+        private byte[] content;
+        private String extension;
     }
 }

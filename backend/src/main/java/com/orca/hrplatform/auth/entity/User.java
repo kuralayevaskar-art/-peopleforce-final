@@ -34,6 +34,8 @@ public class User extends BaseEntity {
     private UserStatus status;
 
     private LocalDateTime lastLoginAt;
+    private Integer failedLoginAttempts;
+    private LocalDateTime lockedAt;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(

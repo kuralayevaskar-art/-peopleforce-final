@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oscar-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: oscar-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      AD_ENABLED: ${AD_ENABLED}
+      AD_URL: ${AD_URL}
+      AD_BASE_DN: ${AD_BASE_DN}
+      AD_BIND_DN: ${AD_BIND_DN}
+      AD_BIND_PASSWORD: ${AD_BIND_PASSWORD}
+      AD_BIND_DOMAIN: ${AD_BIND_DOMAIN}
+      AD_DEFAULT_DOMAIN: ${AD_DEFAULT_DOMAIN}
+      AD_TARGET_OU: ${AD_TARGET_OU}
+      AD_DEFAULT_DEPARTMENT: ${AD_DEFAULT_DEPARTMENT}
+      AD_CHANGE_PASSWORD_AT_LOGON: ${AD_CHANGE_PASSWORD_AT_LOGON}
+      PROVISIONING_DRY_RUN: ${PROVISIONING_DRY_RUN}
+      POWERSHELL_EXECUTABLE: ${POWERSHELL_EXECUTABLE}
+      M365_SYNC_ENABLED: ${M365_SYNC_ENABLED}
+      M365_SYNC_HOST: ${M365_SYNC_HOST}
+      M365_SYNC_USERNAME: ${M365_SYNC_USERNAME}
+      M365_SYNC_PASSWORD: ${M365_SYNC_PASSWORD}
+      ZKTECO_SYNC_ENABLED: ${ZKTECO_SYNC_ENABLED}
+      ZKTECO_HOST: ${ZKTECO_HOST}
+      ZKTECO_PORT: ${ZKTECO_PORT}
+      ZKTECO_DB_NAME: ${ZKTECO_DB_NAME}
+      ZKTECO_USERNAME: ${ZKTECO_USERNAME}
+      ZKTECO_PASSWORD: ${ZKTECO_PASSWORD}
+      ZKTECO_PHOTO_ROOT: ${ZKTECO_PHOTO_ROOT}
+      SYNOLOGY_ENABLED: ${SYNOLOGY_ENABLED}
+      SYNOLOGY_HOST: ${SYNOLOGY_HOST}
+      SYNOLOGY_ROOT_PATH: ${SYNOLOGY_ROOT_PATH}
+      SYNOLOGY_USERNAME: ${SYNOLOGY_USERNAME}
+      SYNOLOGY_PASSWORD: ${SYNOLOGY_PASSWORD}
+      MAIL_ENABLED: ${MAIL_ENABLED}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_STARTTLS: ${MAIL_STARTTLS}
+      LOG_PATH: /app/logs
+    volumes:
+      - backend_logs:/app/logs
+      - employee_storage:/app/storage
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: oscar-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  backend_logs:
+  employee_storage:

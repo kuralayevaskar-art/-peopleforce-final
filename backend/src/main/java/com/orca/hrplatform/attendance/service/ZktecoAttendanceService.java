@@ -6,6 +6,7 @@ import com.orca.hrplatform.attendance.dto.LateEmployeeResponse;
 import com.orca.hrplatform.attendance.dto.LiveAttendanceResponse;
 import com.orca.hrplatform.attendance.dto.TopLateResponse;
 import com.orca.hrplatform.attendance.dto.ZktecoDepartmentResponse;
+import com.orca.hrplatform.attendance.dto.ZktecoPersonPhotoResponse;
 import com.orca.hrplatform.attendance.entity.AttendanceLog;
 import com.orca.hrplatform.attendance.entity.AttendanceSource;
 import com.orca.hrplatform.attendance.entity.AttendanceStatus;
@@ -110,6 +111,20 @@ public class ZktecoAttendanceService {
                         .name(rs.getString("department_name"))
                         .rootDepartment(rs.getString("root_department"))
                         .employeeCount(rs.getLong("employee_count"))
+                        .build());
+    }
+
+    public List<ZktecoPersonPhotoResponse> personPhotos() {
+        return jdbcTemplate().query("""
+                SELECT pin, name, last_name, photo_path
+                FROM pers_person
+                WHERE photo_path IS NOT NULL
+                  AND photo_path <> ''
+                """, (rs, rowNum) -> ZktecoPersonPhotoResponse.builder()
+                        .pin(rs.getString("pin"))
+                        .name(rs.getString("name"))
+                        .lastName(rs.getString("last_name"))
+                        .photoPath(rs.getString("photo_path"))
                         .build());
     }
 

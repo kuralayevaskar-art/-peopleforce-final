@@ -6,6 +6,7 @@ import com.orca.hrplatform.attendance.dto.LateEmployeeResponse;
 import com.orca.hrplatform.attendance.dto.LiveAttendanceResponse;
 import com.orca.hrplatform.attendance.dto.TopLateResponse;
 import com.orca.hrplatform.attendance.dto.ZktecoDepartmentResponse;
+import com.orca.hrplatform.attendance.dto.ZktecoPersonPhotoResponse;
 import com.orca.hrplatform.attendance.service.ZktecoAttendanceService;
 import com.orca.hrplatform.common.response.ApiResponse;
 import com.orca.hrplatform.integration.zkteco.config.ZktecoProperties;
@@ -57,6 +58,11 @@ public class AttendanceController {
     @GetMapping("/departments")
     public ApiResponse<List<ZktecoDepartmentResponse>> departments() {
         return ApiResponse.success(zktecoAttendanceService.departments());
+    }
+
+    @GetMapping("/photos")
+    public ApiResponse<List<ZktecoPersonPhotoResponse>> photos() {
+        return ApiResponse.success(zktecoAttendanceService.personPhotos());
     }
 
     @GetMapping("/late/today")

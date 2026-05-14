@@ -1,0 +1,11 @@
+.git
+.vscode
+logs
+storage
+screen
+frontend/node_modules
+frontend/dist
+frontend/.angular
+backend/target
+backend/*.log
+backend/src/main/resources/application-secrets.properties

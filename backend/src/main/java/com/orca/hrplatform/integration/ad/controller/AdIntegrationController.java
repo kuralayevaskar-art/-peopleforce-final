@@ -3,11 +3,15 @@ package com.orca.hrplatform.integration.ad.controller;
 import com.orca.hrplatform.common.response.ApiResponse;
 import com.orca.hrplatform.integration.ad.config.AdProperties;
 import com.orca.hrplatform.integration.ad.dto.AdConnectionTestResponse;
+import com.orca.hrplatform.integration.ad.dto.AdPhotoSyncResponse;
 import com.orca.hrplatform.integration.ad.dto.AdSettingsRequest;
 import com.orca.hrplatform.integration.ad.dto.AdSettingsResponse;
+import com.orca.hrplatform.integration.ad.dto.AdUserMoveRequest;
 import com.orca.hrplatform.integration.ad.dto.AdUserResponse;
 import com.orca.hrplatform.integration.ad.service.AdDirectoryService;
 import com.orca.hrplatform.integration.ad.service.AdEmployeeSyncService;
+import com.orca.hrplatform.integration.ad.service.AdZktecoPhotoSyncService;
+import com.orca.hrplatform.provisioning.service.PowerShellProvisioningService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +31,8 @@ public class AdIntegrationController {
     private final AdProperties adProperties;
     private final AdDirectoryService adDirectoryService;
     private final AdEmployeeSyncService adEmployeeSyncService;
+    private final AdZktecoPhotoSyncService adZktecoPhotoSyncService;
+    private final PowerShellProvisioningService powerShellProvisioningService;
 
     @GetMapping("/settings/preview")
     public ApiResponse<AdSettingsResponse> previewSettings() {
@@ -72,6 +78,30 @@ public class AdIntegrationController {
         List<AdDirectoryService.AdUser> users = adDirectoryService.listUsers(request);
         adEmployeeSyncService.sync(users);
         return ApiResponse.success(toResponses(users), "AD users synchronized");
+    }
+
+    @PostMapping("/photos/sync-to-zkteco")
+    public ApiResponse<List<AdPhotoSyncResponse>> syncPhotosToZkteco(@Valid @RequestBody AdSettingsRequest request) {
+        List<AdDirectoryService.AdUser> users = adDirectoryService.listUsers(request);
+        return ApiResponse.success(adZktecoPhotoSyncService.syncAll(users), "AD photos synchronized to ZKTeco");
+    }
+
+    @PostMapping("/users/move")
+    public ApiResponse<PowerShellProvisioningService.ProvisioningCommandResult> moveUser(@Valid @RequestBody AdUserMoveRequest request) {
+        try {
+            PowerShellProvisioningService.ProvisioningCommandResult result =
+                    powerShellProvisioningService.updateAdUserDepartment(PowerShellProvisioningService.UpdateAdUserDepartmentCommand.builder()
+                            .login(request.getLogin())
+                            .department(request.getDepartment())
+                            .managerLogin(request.getManagerLogin())
+                            .build());
+            return ApiResponse.success(result, "AD department and manager update requested");
+        } catch (RuntimeException ex) {
+            return ApiResponse.success(
+                    PowerShellProvisioningService.ProvisioningCommandResult.error(ex.getMessage()),
+                    "AD department and manager update failed"
+            );
+        }
     }
 
     private List<AdUserResponse> toResponses(List<AdDirectoryService.AdUser> users) {
